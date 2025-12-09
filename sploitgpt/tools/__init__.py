@@ -95,3 +95,8 @@ from .commands import (
     format_commands_for_agent,
     ALL_COMMANDS,
 )
+
+# Import new tools (registers them via decorator)
+from . import intel
+from . import cve
+from . import shodan
