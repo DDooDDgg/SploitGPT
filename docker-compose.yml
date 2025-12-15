@@ -1,52 +1,128 @@
+version: "3.9"
+
 services:
   sploitgpt:
     build:
       context: .
       dockerfile: Dockerfile
+    image: sploitgpt:latest
     container_name: sploitgpt
     hostname: sploitgpt
     stdin_open: true
     tty: true
-    privileged: true
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    # Minimal capabilities for common pentest tooling + VPN in-container.
+    # NET_RAW: required for tools like nmap/masscan
+    # NET_ADMIN: required for WireGuard/OpenVPN and route/DNS manipulation
     cap_add:
       - NET_ADMIN
       - NET_RAW
-      - SYS_PTRACE
+
+    # Required for VPN clients that create a tunnel interface (WireGuard/OpenVPN)
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    # WireGuard helper (wg-quick) often requires this sysctl
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+
+    # Keep container sandboxing enabled
     security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
-      - no-new-privileges:false
+      - no-new-privileges:true
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      - SPLOITGPT_MODEL=${SPLOITGPT_MODEL:-qwen2.5:32b}
-      - TERM=xterm-256color
+      # LLM Configuration
+      # Default to the compose Ollama service on the private docker network.
+      SPLOITGPT_OLLAMA_HOST: "${SPLOITGPT_OLLAMA_HOST:-http://ollama:11434}"
+      SPLOITGPT_MODEL: "${SPLOITGPT_MODEL:-qwen2.5:7b}"
+      # Metasploit RPC Configuration (runs inside container)
+      SPLOITGPT_MSF_HOST: "127.0.0.1"
+      SPLOITGPT_MSF_PORT: "55553"
+      SPLOITGPT_MSF_PASSWORD: "sploitgpt"
+      SPLOITGPT_MSF_SSL: "false"
+
+      # Optional: in-container VPN (WireGuard). Provide /vpn/mullvad.conf via ./vpn on the host.
+      # SPLOITGPT_VPN_AUTOSTART: "true"
+      # SPLOITGPT_VPN_WG_CONF: "/vpn/mullvad.conf"
+
+      # Terminal
+      TERM: "xterm-256color"
     volumes:
       - ./loot:/app/loot
       - ./sessions:/app/sessions
       - ./data:/app/data
+      - ./models:/app/models
+      # Local-only VPN configs (ignored by git)
+      - ./vpn:/vpn:ro
+    # Keep the container alive as a toolbox; run SploitGPT via ./sploitgpt.sh (exec)
+    command: ["sleep", "infinity"]
+
+    # Basic readiness checks for core services (PostgreSQL + Metasploit RPC + Ollama)
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          pg_isready -q -p 5432 &&
+          nc -z "$$SPLOITGPT_MSF_HOST" "$$SPLOITGPT_MSF_PORT" &&
+          curl -fsS "$${SPLOITGPT_OLLAMA_HOST:-http://ollama:11434}/api/version" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    # =========================================================================
+    # NETWORK MODE
+    # =========================================================================
+    # Bridge networking (default): container network is isolated from the host.
+    # Publish ports only when you explicitly need inbound callbacks/listeners.
     networks:
       - sploitnet
-    # Use host network for full access to target networks
-    # Uncomment the line below and comment out 'networks' for host networking
-    # network_mode: host
 
-  # Optional: Run Ollama in the same compose (requires NVIDIA GPU)
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   ports:
-  #     - "11434:11434"
-  #   networks:
-  #     - sploitnet
+    # Optional listener ports (uncomment as needed)
+    # ports:
+    #   - "4444:4444/tcp"   # Reverse shell listener
+    #   - "8080:8080/tcp"   # HTTP server for payloads
+    #   - "8443:8443/tcp"   # HTTPS server
+    # =========================================================================
+
+  # Ollama LLM server (so the whole stack can be started/stopped together)
+  #
+  # By default, we bind Ollama only to the Docker bridge IP (not LAN/Internet).
+  # If your bridge IP is not 172.17.0.1, set SPLOITGPT_OLLAMA_BIND_IP.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    # Ollama is only needed by other containers; do not expose it by default.
+    # If you want local host access for debugging, uncomment one of these:
+    # ports:
+    #   - "127.0.0.1:11435:11434"  # local-only
+    #   - "${SPLOITGPT_OLLAMA_BIND_IP:-172.17.0.1}:11435:11434"  # docker bridge only
+    # Optional: NVIDIA GPU (requires nvidia-container-toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    networks:
+      - sploitnet
 
 networks:
   sploitnet:

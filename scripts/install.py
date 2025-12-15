@@ -17,20 +17,21 @@ import platform
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 # Rich for pretty output
 try:
     from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.prompt import Confirm, Prompt
 except ImportError:
     print("Installing rich for pretty output...")
     subprocess.run([sys.executable, "-m", "pip", "install", "rich", "-q"], check=True)
     from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.prompt import Confirm, Prompt
 
 
@@ -44,11 +45,10 @@ def is_in_container() -> bool:
         return True
     # Check for container cgroup
     try:
-        with open("/proc/1/cgroup", "r") as f:
+        with open("/proc/1/cgroup") as f:
             return "docker" in f.read() or "lxc" in f.read()
-    except:
-        pass
-    return False
+    except OSError:
+        return False
 
 
 BANNER = """
@@ -88,7 +88,7 @@ def check_gpu() -> dict:
             # Recommend model based on VRAM
             if result["vram_gb"] >= 24:
                 result["recommended_model"] = "qwen2.5:32b"
-            elif result["vram_gb"] >= 16:
+            elif result["vram_gb"] >= 12:
                 result["recommended_model"] = "qwen2.5:14b"
             elif result["vram_gb"] >= 8:
                 result["recommended_model"] = "qwen2.5:7b"
@@ -145,50 +145,93 @@ def install_ollama() -> bool:
         return False
 
 
-def start_ollama() -> bool:
-    """Start Ollama service."""
+def _normalize_ollama_host(value: str) -> str:
+    """Normalize host/URL into a base URL usable by HTTP checks and the ollama CLI."""
+    v = value.strip()
+    if v.startswith("http://") or v.startswith("https://"):
+        return v
+    if ":" in v:
+        return f"http://{v}"
+    return f"http://{v}:11434"
+
+
+def _ollama_reachable(base_url: str) -> bool:
     try:
-        # Check if already running
-        result = subprocess.run(
-            ["curl", "-s", "http://localhost:11434/api/version"],
-            capture_output=True
-        )
-        if result.returncode == 0:
-            return True
-        
-        # Start in background
+        with urllib.request.urlopen(f"{base_url}/api/version", timeout=2) as resp:
+            return getattr(resp, "status", 200) == 200
+    except Exception:
+        return False
+
+
+def find_ollama_endpoint() -> str | None:
+    """Return the first reachable Ollama base URL (or None if none are reachable)."""
+    candidates: list[str] = []
+
+    for key in ("OLLAMA_HOST", "SPLOITGPT_OLLAMA_HOST"):
+        raw = os.environ.get(key)
+        if raw:
+            candidates.append(_normalize_ollama_host(raw))
+
+    candidates.extend(
+        [
+            "http://localhost:11434",
+            "http://127.0.0.1:11434",
+            "http://172.17.0.1:11434",
+        ]
+    )
+
+    # Deduplicate while keeping order
+    seen: set[str] = set()
+    for url in candidates:
+        if url in seen:
+            continue
+        seen.add(url)
+        if _ollama_reachable(url):
+            return url
+
+    return None
+
+
+def start_ollama() -> str | None:
+    """Ensure Ollama is reachable; returns the reachable base URL or None."""
+    try:
+        endpoint = find_ollama_endpoint()
+        if endpoint:
+            return endpoint
+
+        # Start in background (fallback)
         subprocess.Popen(
             ["ollama", "serve"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True
+            start_new_session=True,
         )
-        
-        # Wait for it to start
+
         import time
+
         for _ in range(30):
             time.sleep(1)
-            result = subprocess.run(
-                ["curl", "-s", "http://localhost:11434/api/version"],
-                capture_output=True
-            )
-            if result.returncode == 0:
-                return True
-        
-        return False
-        
+            endpoint = find_ollama_endpoint()
+            if endpoint:
+                return endpoint
+
+        return None
+
     except Exception as e:
         console.print(f"[red]Failed to start Ollama: {e}[/red]")
-        return False
+        return None
 
 
-def pull_model(model: str) -> bool:
+def pull_model(model: str, ollama_host: str) -> bool:
     """Pull an Ollama model."""
     console.print(f"\n[yellow]Pulling model {model}...[/yellow]")
     console.print("[dim]This may take a while depending on your connection speed.[/dim]")
-    
+
+    env = os.environ.copy()
+    env["OLLAMA_HOST"] = ollama_host
+
     try:
-        subprocess.run(["ollama", "pull", model], check=True)
+        subprocess.run(["ollama", "pull", model], check=True, env=env)
         return True
     except subprocess.CalledProcessError:
         return False
@@ -236,44 +279,75 @@ async def build_training_data():
         console.print(f"[red]✗ Failed to build training data: {e}[/red]")
 
 
-async def run_finetuning(model: str):
-    """Run install-time fine-tuning."""
-    from sploitgpt.training.finetune import InstallTimeFineTuner
-    
+async def run_finetuning(model: str) -> str:
+    """Run install-time fine-tuning.
+
+    Note: The fine-tuning pipeline is implemented in sploitgpt.training.finetune.
+    It produces a GGUF and can register it with Ollama as a new model name.
+
+    Args:
+        model: The currently selected Ollama base model name (used as fallback).
+
+    Returns:
+        Model name to use after fine-tuning ("sploitgpt" on success, else input model).
+    """
+
     console.print("\n[yellow]Running fine-tuning...[/yellow]")
-    console.print("[dim]This will create a security-specialized version of your model.[/dim]")
-    
-    try:
-        finetuner = InstallTimeFineTuner(
-            base_model=model,
-            output_name="sploitgpt"
+    console.print("[dim]This will create a security-specialized model and register it with Ollama.[/dim]")
+
+    # Training data is produced by scripts/build_training_data.py
+    training_data = Path("data/training/sploitgpt_train.jsonl")
+    if not training_data.exists():
+        console.print(
+            "[yellow]⚠ Training data not found. Build it first (or re-run installer and choose to build it).[/yellow]"
         )
-        
-        success = await finetuner.run_finetuning()
-        
-        if success:
-            console.print("[green]✓ Fine-tuning completed![/green]")
-            console.print("[dim]Your model is now specialized for penetration testing.[/dim]")
-            return "sploitgpt"
-        else:
+        return model
+
+    try:
+        from sploitgpt.training.finetune import register_with_ollama, run_finetuning
+
+        output_dir = Path("models/sploitgpt")
+
+        # run_finetuning is CPU/GPU heavy and synchronous; run it in a thread.
+        success = await asyncio.to_thread(
+            run_finetuning,
+            training_data=training_data,
+            output_dir=output_dir,
+            base_model=None,  # auto-detect based on GPU
+            epochs=3,
+        )
+
+        if not success:
             console.print("[yellow]⚠ Fine-tuning skipped or failed, using base model[/yellow]")
             return model
-            
+
+        registered = await asyncio.to_thread(
+            register_with_ollama,
+            output_dir / "gguf",
+            "sploitgpt",
+        )
+
+        if registered:
+            console.print("[green]✓ Fine-tuning completed and registered as 'sploitgpt'[/green]")
+            return "sploitgpt"
+
+        console.print(
+            "[yellow]⚠ Fine-tuning completed but could not register with Ollama. Using base model.[/yellow]"
+        )
+        return model
+
     except Exception as e:
         console.print(f"[red]✗ Fine-tuning failed: {e}[/red]")
         return model
 
 
-def build_docker_image():
-    """Build the Docker image."""
+def build_docker_image() -> bool:
+    """Build the Docker image via docker compose."""
     console.print("\n[yellow]Building Docker image...[/yellow]")
     console.print("[dim]This creates a Kali Linux container with all pentesting tools.[/dim]")
-    
+
     try:
-        subprocess.run(
-            ["docker", "build", "-t", "sploitgpt", "."],
-            check=True
-        )
+        subprocess.run(["docker", "compose", "build"], check=True)
         console.print("[green]✓ Docker image built successfully[/green]")
         return True
     except subprocess.CalledProcessError as e:
@@ -281,17 +355,24 @@ def build_docker_image():
         return False
 
 
-def create_env_file(model: str, ollama_host: str = "http://host.docker.internal:11434"):
-    """Create .env file with configuration."""
+def create_env_file(model: str, ollama_host: str):
+    """Create/overwrite .env file with configuration."""
     env_content = f"""# SploitGPT Configuration
 SPLOITGPT_OLLAMA_HOST={ollama_host}
 SPLOITGPT_MODEL={model}
-SPLOITGPT_LLM_MODEL=ollama/{model}
+SPLOITGPT_LLM_MODEL={model}
 SPLOITGPT_DEBUG=false
 SPLOITGPT_AUTO_TRAIN=true
+# Optional API keys
+# SHODAN_API_KEY=
 """
-    
+
     env_path = Path(".env")
+    if env_path.exists() and env_path.read_text().strip():
+        if not Confirm.ask(f"{env_path} already exists. Overwrite?", default=False):
+            console.print("[yellow]Skipping .env update[/yellow]")
+            return
+
     env_path.write_text(env_content)
     console.print(f"[green]✓ Configuration saved to {env_path}[/green]")
 
@@ -342,12 +423,15 @@ async def main():
                 console.print("[red]Failed to install Ollama[/red]")
                 return
     
-    # Start Ollama
-    console.print("\n[cyan]Starting Ollama service...[/cyan]")
-    if not start_ollama():
-        console.print("[red]Failed to start Ollama[/red]")
+    # Start/locate Ollama
+    console.print("\n[cyan]Checking Ollama service...[/cyan]")
+    ollama_host = start_ollama()
+    if not ollama_host:
+        console.print("[red]Failed to start or reach Ollama[/red]")
+        console.print("[dim]Try starting Ollama manually, then re-run this installer.[/dim]")
         return
-    console.print("[green]✓ Ollama is running[/green]")
+
+    console.print(f"[green]✓ Ollama is running[/green] [dim]({ollama_host})[/dim]")
     
     # Model selection
     model = Prompt.ask(
@@ -357,7 +441,7 @@ async def main():
     )
     
     # Pull model
-    if not pull_model(model):
+    if not pull_model(model, ollama_host=ollama_host):
         console.print(f"[red]Failed to pull {model}[/red]")
         return
     console.print(f"[green]✓ Model {model} is ready[/green]")
@@ -387,7 +471,7 @@ async def main():
             build_docker_image()
     
     # Create config
-    create_env_file(final_model)
+    create_env_file(final_model, ollama_host=ollama_host)
     
     # Done!
     console.print(Panel(
@@ -397,8 +481,8 @@ async def main():
 [cyan]To start SploitGPT:[/cyan]
 
   [bold]Docker (recommended):[/bold]
-    docker-compose up -d
-    docker exec -it sploitgpt sploitgpt
+    docker compose up -d --build
+    ./sploitgpt.sh
 
   [bold]Local development:[/bold]
     source .venv/bin/activate

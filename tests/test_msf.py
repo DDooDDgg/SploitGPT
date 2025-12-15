@@ -2,8 +2,9 @@
 Tests for Metasploit RPC integration
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from sploitgpt.msf import MetasploitRPC, MSFModule, MSFSession
 

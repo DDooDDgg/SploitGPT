@@ -7,12 +7,32 @@ Uses MSF as the backend instead of reinventing exploit management.
 
 import asyncio
 import json
-import msgpack
-import ssl
-from typing import Optional, Any
 from dataclasses import dataclass
+from typing import Any, cast
 
 import httpx
+import msgpack
+
+
+def _decode_msgpack(obj: Any) -> Any:
+    """Recursively decode msgpack responses.
+
+    msfrpcd sometimes returns maps with bytes keys/values; normalize to str for
+    easier downstream handling.
+    """
+    if isinstance(obj, bytes):
+        try:
+            return obj.decode("utf-8")
+        except Exception:
+            return obj.decode("utf-8", errors="replace")
+
+    if isinstance(obj, list):
+        return [_decode_msgpack(v) for v in obj]
+
+    if isinstance(obj, dict):
+        return {_decode_msgpack(k): _decode_msgpack(v) for k, v in obj.items()}
+
+    return obj
 
 
 @dataclass
@@ -56,15 +76,23 @@ class MetasploitRPC:
         port: int = 55553,
         username: str = "msf",
         password: str = "msf",
-        ssl: bool = True,
+        use_ssl: bool = True,
+        ssl: bool | None = None,
+        verify_ssl: bool | str = True,
     ):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
-        self.use_ssl = ssl
-        self.token: Optional[str] = None
-        self._client: Optional[httpx.AsyncClient] = None
+
+        # Backwards-compatible: older code used `ssl=`.
+        if ssl is not None:
+            use_ssl = ssl
+
+        self.use_ssl = use_ssl
+        self.verify_ssl = verify_ssl
+        self.token: str | None = None
+        self._client: httpx.AsyncClient | None = None
     
     @property
     def base_url(self) -> str:
@@ -72,34 +100,34 @@ class MetasploitRPC:
         scheme = "https" if self.use_ssl else "http"
         return f"{scheme}://{self.host}:{self.port}/api"
     
-    async def connect(self) -> bool:
+    async def connect(self, *, quiet: bool = True) -> bool:
         """Connect and authenticate with msfrpcd."""
         try:
-            # Create client with SSL verification disabled (self-signed cert)
             self._client = httpx.AsyncClient(
-                verify=False,
+                verify=self.verify_ssl,
                 timeout=30.0,
             )
-            
+
             # Authenticate
             result = await self._call("auth.login", [self.username, self.password])
-            
+
             if result.get("result") == "success":
                 self.token = result.get("token")
                 return True
-            
+
             return False
-            
+
         except Exception as e:
-            print(f"MSF connection failed: {e}")
+            if not quiet:
+                print(f"MSF connection failed: {e}")
             return False
     
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from msfrpcd."""
         if self.token:
             try:
                 await self._call("auth.logout", [self.token])
-            except:
+            except Exception:
                 pass
         
         if self._client:
@@ -108,7 +136,7 @@ class MetasploitRPC:
         
         self.token = None
     
-    async def _call(self, method: str, params: list = None) -> dict:
+    async def _call(self, method: str, params: list[Any] | None = None) -> Any:
         """Make an RPC call to msfrpcd."""
         if not self._client:
             raise RuntimeError("Not connected to MSF")
@@ -131,7 +159,8 @@ class MetasploitRPC:
         response.raise_for_status()
         
         # Unpack response
-        return msgpack.unpackb(response.content, raw=False)
+        unpacked = msgpack.unpackb(response.content, raw=False)
+        return _decode_msgpack(unpacked)
     
     # =========================================================================
     # Module Operations
@@ -140,7 +169,7 @@ class MetasploitRPC:
     async def search_modules(
         self,
         query: str,
-        module_type: Optional[str] = None,
+        module_type: str | None = None,
     ) -> list[MSFModule]:
         """
         Search for MSF modules.
@@ -152,11 +181,13 @@ class MetasploitRPC:
         Returns:
             List of matching modules
         """
-        # Use module.search
-        search_params = f"name:{query}"
-        if module_type:
+        # Use module.search (same syntax as msfconsole search)
+        # Don't force "name:" — it can miss modules whose human-readable name
+        # doesn't contain the keyword (e.g., path contains "portscan").
+        search_params = query.strip()
+        if module_type and "type:" not in search_params:
             search_params += f" type:{module_type}"
-        
+
         result = await self._call("module.search", [search_params])
         
         modules = []
@@ -183,13 +214,13 @@ class MetasploitRPC:
         
         return modules
     
-    async def get_module_info(self, module_type: str, module_name: str) -> dict:
+    async def get_module_info(self, module_type: str, module_name: str) -> dict[str, Any]:
         """Get detailed info about a module."""
-        return await self._call("module.info", [module_type, module_name])
+        return cast(dict[str, Any], await self._call("module.info", [module_type, module_name]))
     
-    async def get_module_options(self, module_type: str, module_name: str) -> dict:
+    async def get_module_options(self, module_type: str, module_name: str) -> dict[str, Any]:
         """Get module options."""
-        return await self._call("module.options", [module_type, module_name])
+        return cast(dict[str, Any], await self._call("module.options", [module_type, module_name]))
     
     # =========================================================================
     # Module Execution
@@ -199,8 +230,8 @@ class MetasploitRPC:
         self,
         module_type: str,
         module_name: str,
-        options: dict,
-    ) -> dict:
+        options: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute a module.
         
@@ -212,19 +243,19 @@ class MetasploitRPC:
         Returns:
             Execution result with job_id or session info
         """
-        return await self._call(
-            "module.execute",
-            [module_type, module_name, options]
+        return cast(
+            dict[str, Any],
+            await self._call("module.execute", [module_type, module_name, options]),
         )
     
-    async def get_job_info(self, job_id: int) -> dict:
+    async def get_job_info(self, job_id: int) -> dict[str, Any]:
         """Get info about a running job."""
-        jobs = await self._call("job.list", [])
-        return jobs.get(str(job_id), {})
+        jobs = cast(dict[str, Any], await self._call("job.list", []))
+        return cast(dict[str, Any], jobs.get(str(job_id), {}))
     
     async def stop_job(self, job_id: int) -> bool:
         """Stop a running job."""
-        result = await self._call("job.stop", [job_id])
+        result = cast(dict[str, Any], await self._call("job.stop", [job_id]))
         return result.get("result") == "success"
     
     # =========================================================================
@@ -252,17 +283,17 @@ class MetasploitRPC:
     
     async def session_write(self, session_id: int, data: str) -> bool:
         """Write to a session (shell input)."""
-        result = await self._call("session.shell_write", [session_id, data])
-        return result.get("write_count", 0) > 0
+        result = cast(dict[str, Any], await self._call("session.shell_write", [session_id, data]))
+        return int(result.get("write_count", 0)) > 0
     
     async def session_read(self, session_id: int) -> str:
         """Read from a session (shell output)."""
-        result = await self._call("session.shell_read", [session_id])
-        return result.get("data", "")
+        result = cast(dict[str, Any], await self._call("session.shell_read", [session_id]))
+        return str(result.get("data", ""))
     
     async def session_stop(self, session_id: int) -> bool:
         """Stop/kill a session."""
-        result = await self._call("session.stop", [session_id])
+        result = cast(dict[str, Any], await self._call("session.stop", [session_id]))
         return result.get("result") == "success"
     
     # =========================================================================
@@ -271,34 +302,43 @@ class MetasploitRPC:
     
     async def console_create(self) -> int:
         """Create a new MSF console."""
-        result = await self._call("console.create", [])
-        return result.get("id")
+        result = cast(dict[str, Any], await self._call("console.create", []))
+        console_id = result.get("id")
+
+        if isinstance(console_id, int):
+            return console_id
+        if isinstance(console_id, str) and console_id.isdigit():
+            return int(console_id)
+
+        raise RuntimeError(f"console.create did not return a console id: {console_id!r}")
     
     async def console_write(self, console_id: int, command: str) -> bool:
         """Write to a console."""
-        result = await self._call("console.write", [console_id, command + "\n"])
-        return result.get("wrote", 0) > 0
+        result = cast(dict[str, Any], await self._call("console.write", [console_id, command + "\n"]))
+        return int(result.get("wrote", 0)) > 0
     
     async def console_read(self, console_id: int) -> tuple[str, bool]:
         """Read from a console. Returns (output, busy)."""
-        result = await self._call("console.read", [console_id])
-        return result.get("data", ""), result.get("busy", False)
+        result = cast(dict[str, Any], await self._call("console.read", [console_id]))
+        return str(result.get("data", "")), bool(result.get("busy", False))
     
     async def console_destroy(self, console_id: int) -> bool:
         """Destroy a console."""
-        result = await self._call("console.destroy", [console_id])
+        result = cast(dict[str, Any], await self._call("console.destroy", [console_id]))
         return result.get("result") == "success"
 
 
 # Convenience functions for agent use
-async def search_exploits(query: str, msf: Optional[MetasploitRPC] = None) -> str:
+async def search_exploits(query: str, msf: MetasploitRPC | None = None) -> str:
     """Search for exploits and return formatted results."""
     own_client = msf is None
-    
+
     if own_client:
-        msf = MetasploitRPC()
+        msf = get_msf_client()
         if not await msf.connect():
             return "❌ Could not connect to Metasploit. Is msfrpcd running?"
+
+    assert msf is not None
     
     try:
         modules = await msf.search_modules(query, module_type="exploit")
@@ -335,16 +375,18 @@ async def search_exploits(query: str, msf: Optional[MetasploitRPC] = None) -> st
 
 async def run_exploit(
     module_name: str,
-    options: dict,
-    msf: Optional[MetasploitRPC] = None,
+    options: dict[str, Any],
+    msf: MetasploitRPC | None = None,
 ) -> str:
     """Run an exploit and return results."""
     own_client = msf is None
-    
+
     if own_client:
-        msf = MetasploitRPC()
+        msf = get_msf_client()
         if not await msf.connect():
             return "❌ Could not connect to Metasploit. Is msfrpcd running?"
+
+    assert msf is not None
     
     try:
         # Execute the exploit
@@ -381,3 +423,17 @@ Use `session_interact({session.id})` to interact with the session."""
     finally:
         if own_client:
             await msf.disconnect()
+
+
+def get_msf_client() -> MetasploitRPC:
+    """Create a Metasploit RPC client from application settings."""
+    from sploitgpt.core.config import get_settings
+    settings = get_settings()
+    return MetasploitRPC(
+        host=settings.msf_host,
+        port=settings.msf_port,
+        username="msf",
+        password=settings.msf_password,
+        use_ssl=settings.msf_ssl,
+        verify_ssl=settings.msf_verify_ssl,
+    )

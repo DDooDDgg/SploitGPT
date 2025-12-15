@@ -16,8 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     zsh \
     net-tools \
+    iproute2 \
+    iptables \
     iputils-ping \
     dnsutils \
+    wireguard-tools \
+    openresolv \
     # Python
     python3 \
     python3-pip \
@@ -27,7 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Reconnaissance
     nmap \
     masscan \
-    rustscan \
+    # NOTE: rustscan package is not available in all Kali mirrors/releases.
+    # Install it separately if you need it (optional).
     # Web testing
     nikto \
     gobuster \
@@ -65,8 +70,14 @@ WORKDIR /app
 # Copy application
 COPY . /app/
 
+# Create and use a virtualenv to avoid pip attempting to uninstall distro Python packages
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 # Install Python dependencies
-RUN pip3 install --no-cache-dir -e . --break-system-packages
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir .
 
 # Create loot directory
 RUN mkdir -p /app/loot /app/sessions /app/data

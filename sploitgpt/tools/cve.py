@@ -3,8 +3,8 @@
 Provides CVE database lookup and searchsploit integration.
 """
 
-import os
 import re
+import shlex
 
 import httpx
 
@@ -33,6 +33,27 @@ def _parse_searchsploit_output(output: str) -> str:
         return "No exploits found."
     
     return '\n'.join(results[:10])  # Limit to 10 results
+
+
+def _quote_query(value: str) -> str:
+    """Shell-quote user input for safe command execution."""
+
+    return shlex.quote(value)
+
+
+def _sanitize_options(value: str) -> str:
+    """Safely format optional flag strings for shell commands."""
+
+    value = (value or "").strip()
+    if not value:
+        return ""
+
+    try:
+        parts = shlex.split(value)
+    except ValueError:
+        return shlex.quote(value)
+
+    return " ".join(shlex.quote(part) for part in parts)
 
 
 @register_tool("cve_search")
@@ -124,9 +145,10 @@ async def cve_search(
     # SearchSploit search (via terminal)
     if source in ("searchsploit", "both"):
         try:
-            cmd = f"searchsploit --color 2>/dev/null '{query}' | head -30"
+            quoted_query = _quote_query(query)
+            cmd = f"searchsploit --color 2>/dev/null {quoted_query} | head -30"
             output = await terminal(cmd, timeout=30)
-            
+
             if output and "Error" not in output:
                 parsed = _parse_searchsploit_output(output)
                 if parsed != "No exploits found." or source == "searchsploit":
@@ -137,7 +159,7 @@ async def cve_search(
                 results.append("## Exploit-DB Results\n")
                 results.append("No exploits found (or searchsploit not installed).")
                 results.append("")
-                
+
         except Exception as e:
             if source == "searchsploit":
                 results.append(f"SearchSploit error: {str(e)}\n")
@@ -170,10 +192,13 @@ async def searchsploit(
     if not query:
         return "Error: query is required"
     
-    # Sanitize query to prevent injection
-    safe_query = query.replace("'", "\\'").replace('"', '\\"')
-    
-    cmd = f"searchsploit --color {options} '{safe_query}' 2>/dev/null | head -50"
+    quoted_query = _quote_query(query)
+    safe_options = _sanitize_options(options)
+
+    cmd = "searchsploit --color"
+    if safe_options:
+        cmd += f" {safe_options}"
+    cmd += f" {quoted_query} 2>/dev/null | head -50"
     
     try:
         output = await terminal(cmd, timeout=30)

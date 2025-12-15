@@ -7,7 +7,7 @@ Handles:
 - Model export and optimization
 """
 
-from .finetune import run_finetuning, check_gpu_available
 from .collector import SessionCollector
+from .finetune import check_gpu_available, run_finetuning
 
 __all__ = ["run_finetuning", "check_gpu_available", "SessionCollector"]

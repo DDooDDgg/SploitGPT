@@ -5,8 +5,6 @@ Helpers for working with wordlists in Kali Linux.
 """
 
 from pathlib import Path
-from typing import Optional
-
 
 # Common wordlist locations in Kali
 WORDLIST_PATHS = {
@@ -64,7 +62,7 @@ TASK_WORDLISTS = {
 }
 
 
-def get_wordlist(name: str) -> Optional[Path]:
+def get_wordlist(name: str) -> Path | None:
     """Get path to a wordlist by name."""
     if name in WORDLIST_PATHS:
         path = Path(WORDLIST_PATHS[name])
@@ -92,7 +90,7 @@ def get_wordlists_for_task(task: str) -> list[Path]:
     return wordlists
 
 
-def suggest_wordlist(context: str) -> tuple[str, Path]:
+def suggest_wordlist(context: str) -> tuple[str, Path | None]:
     """
     Suggest a wordlist based on context.
     
@@ -138,18 +136,18 @@ def suggest_wordlist(context: str) -> tuple[str, Path]:
     return "General wordlist", get_wordlist("dirb_common")
 
 
-def list_available_wordlists() -> dict[str, dict]:
+def list_available_wordlists() -> dict[str, dict[str, object]]:
     """List all available wordlists with info."""
-    available = {}
+    available: dict[str, dict[str, object]] = {}
     
     for name, path_str in WORDLIST_PATHS.items():
         path = Path(path_str)
         if path.exists():
             # Count lines
             try:
-                with open(path, 'r', errors='ignore') as f:
+                with open(path, errors='ignore') as f:
                     line_count = sum(1 for _ in f)
-            except:
+            except (OSError, UnicodeError):
                 line_count = -1
             
             available[name] = {
@@ -171,13 +169,12 @@ def format_wordlist_suggestions(task: str) -> str:
     lines = [f"**Recommended wordlists for {task}:**\n"]
     
     for i, wl in enumerate(wordlists, 1):
-        name = wl.stem
         try:
-            with open(wl, 'r', errors='ignore') as f:
-                line_count = sum(1 for _ in f)
-        except:
+            with open(wl, errors='ignore') as f:
+                line_count = str(sum(1 for _ in f))
+        except (OSError, UnicodeError):
             line_count = "?"
-        
+
         lines.append(f"{i}. `{wl}` ({line_count} entries)")
     
     return "\n".join(lines)

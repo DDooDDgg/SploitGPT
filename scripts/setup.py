@@ -11,7 +11,6 @@ Runs on first install to:
 """
 
 import asyncio
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 console = Console()
@@ -96,7 +94,7 @@ def check_docker() -> bool:
             timeout=5,
         )
         return result.returncode == 0
-    except:
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
 
 
@@ -142,10 +140,10 @@ async def build_training_data(progress: Progress) -> Path:
     task = progress.add_task("[cyan]Building training data...", total=None)
     
     try:
-        count = await build_data(output_path)
+        await build_data(output_path)
         progress.update(task, completed=True)
         return output_path
-    except Exception as e:
+    except Exception:
         progress.update(task, completed=True)
         raise
 
@@ -170,6 +168,7 @@ async def run_setup():
     """Main setup flow."""
     console.print(BANNER)
     console.print("[bold]First-Time Setup[/]\n")
+    console.print("[yellow]⚠ This script is deprecated. Use ./install.sh (scripts/install.py) instead.[/yellow]\n")
     
     # Step 1: Check requirements
     console.print("[bold cyan]Step 1: Checking Requirements[/]\n")
@@ -258,7 +257,7 @@ async def run_setup():
         console.print(f"  [red]✗[/] ATT&CK: {kb_results['attack'].get('error', 'unknown error')}")
     
     if kb_results.get("atomic", {}).get("success"):
-        console.print(f"  [green]✓[/] Atomic Red Team samples loaded")
+        console.print("  [green]✓[/] Atomic Red Team samples loaded")
     
     # Step 4: Build training data (if full setup)
     if choice == "1":
@@ -293,7 +292,7 @@ async def run_setup():
     
     if not ollama_ok:
         console.print("\n  [yellow]⚠ Ollama not running. Start it with: ollama serve[/]")
-        console.print("  [dim]Then run: ollama pull {base_model}[/]")
+        console.print(f"  [dim]Then run: ollama pull {base_model}[/]")
     else:
         if Confirm.ask(f"  Download {base_model} now?", default=True):
             download_base_model(base_model)
@@ -335,7 +334,8 @@ async def run_setup():
     console.print("  [bold]sploitgpt[/]")
     console.print()
     console.print("Or run in Docker:")
-    console.print("  [bold]docker-compose up[/]")
+    console.print("  [bold]docker compose up -d --build[/]")
+    console.print("  [bold]./sploitgpt.sh[/]")
     console.print()
 
 

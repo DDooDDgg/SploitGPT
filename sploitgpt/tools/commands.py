@@ -19,12 +19,12 @@ RECON_COMMANDS = {
         "example": "nmap -T4 -F 10.0.0.1",
     },
     "port_scan_full": {
-        "command": "nmap -p- -T4 {target} -oA loot/nmap_full_{target}",
+        "command": "nmap -p- -T4 {target} -oA {loot_dir}/nmap_full_{target}",
         "description": "Full port scan (all 65535 ports)",
         "example": "nmap -p- -T4 10.0.0.1 -oA loot/nmap_full_10.0.0.1",
     },
     "port_scan_service": {
-        "command": "nmap -sV -sC -p {ports} {target} -oA loot/nmap_svc_{target}",
+        "command": "nmap -sV -sC -p {ports} {target} -oA {loot_dir}/nmap_svc_{target}",
         "description": "Service and version detection with default scripts",
         "example": "nmap -sV -sC -p 22,80,443 10.0.0.1",
     },
@@ -34,7 +34,7 @@ RECON_COMMANDS = {
         "example": "nmap --script=vuln -p 80,443 10.0.0.1",
     },
     "masscan_full": {
-        "command": "masscan -p1-65535 {target} --rate=1000 -oL loot/masscan_{target}.list",
+        "command": "masscan -p1-65535 {target} --rate=1000 -oL {loot_dir}/masscan_{target}.list",
         "description": "Very fast full port scan",
         "example": "masscan -p1-65535 10.0.0.1 --rate=1000",
     },
@@ -49,7 +49,7 @@ WEB_COMMANDS = {
         "example": "whatweb http://10.0.0.1",
     },
     "gobuster_dirs": {
-        "command": "gobuster dir -u {url} -w /usr/share/wordlists/dirb/common.txt -o loot/gobuster.txt",
+        "command": "gobuster dir -u {url} -w /usr/share/wordlists/dirb/common.txt -o {loot_dir}/gobuster.txt",
         "description": "Directory brute force",
         "example": "gobuster dir -u http://10.0.0.1 -w /usr/share/wordlists/dirb/common.txt",
     },
@@ -59,7 +59,7 @@ WEB_COMMANDS = {
         "example": "gobuster vhost -u http://target.htb -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
     },
     "nikto": {
-        "command": "nikto -h {url} -o loot/nikto.txt",
+        "command": "nikto -h {url} -o {loot_dir}/nikto.txt",
         "description": "Web server scanner",
         "example": "nikto -h http://10.0.0.1",
     },
@@ -69,7 +69,7 @@ WEB_COMMANDS = {
         "example": "wpscan --url http://10.0.0.1/wordpress --enumerate u,vp,vt",
     },
     "nuclei": {
-        "command": "nuclei -u {url} -o loot/nuclei.txt",
+        "command": "nuclei -u {url} -o {loot_dir}/nuclei.txt",
         "description": "Fast vulnerability scanner with templates",
         "example": "nuclei -u http://10.0.0.1",
     },
@@ -94,7 +94,7 @@ SMB_COMMANDS = {
         "example": "smbmap -H 10.0.0.1",
     },
     "enum4linux": {
-        "command": "enum4linux -a {target} | tee loot/enum4linux.txt",
+        "command": "enum4linux -a {target} | tee {loot_dir}/enum4linux.txt",
         "description": "Full SMB/NetBIOS enumeration",
         "example": "enum4linux -a 10.0.0.1",
     },
@@ -222,15 +222,23 @@ ALL_COMMANDS = {
 }
 
 
-def get_command(category: str, name: str, **kwargs) -> str:
+def get_command(category: str, name: str, **kwargs: object) -> str | None:
     """Get a command template with substitutions."""
     if category not in ALL_COMMANDS:
         return None
-    
+
     if name not in ALL_COMMANDS[category]:
         return None
     
     cmd = ALL_COMMANDS[category][name]["command"]
+
+    # Provide a default loot_dir if not supplied.
+    if "{loot_dir}" in cmd and "loot_dir" not in kwargs:
+        try:
+            from sploitgpt.core.config import get_settings
+            kwargs["loot_dir"] = get_settings().loot_dir
+        except Exception:
+            kwargs["loot_dir"] = "loot"
     
     # Substitute variables
     for key, value in kwargs.items():
@@ -239,9 +247,9 @@ def get_command(category: str, name: str, **kwargs) -> str:
     return cmd
 
 
-def search_commands(query: str) -> list[dict]:
+def search_commands(query: str) -> list[dict[str, str]]:
     """Search for commands by keyword."""
-    results = []
+    results: list[dict[str, str]] = []
     query_lower = query.lower()
     
     for category, commands in ALL_COMMANDS.items():
@@ -268,9 +276,56 @@ def format_commands_for_agent(category: str) -> str:
     
     for name, info in commands.items():
         lines.append(f"**{name}**: {info['description']}")
-        lines.append(f"```bash")
+        lines.append("```bash")
         lines.append(info['example'])
         lines.append("```")
+        lines.append("")
+    
+    return "\n".join(lines)
+
+
+def get_all_commands_formatted() -> str:
+    """Get a compact reference of all commands for the LLM."""
+    lines = ["## Quick Command Reference\n"]
+    
+    # Group by task type
+    task_groups = {
+        "Scanning": [
+            ("nmap -sV -sC {target}", "Service/version scan with scripts"),
+            ("nmap -p- -T4 {target}", "Full port scan"),
+            ("nmap --script=vuln {target}", "Vulnerability scan"),
+            ("masscan -p1-65535 {target} --rate=1000", "Fast full port scan"),
+        ],
+        "Web Enumeration": [
+            ("gobuster dir -u {url} -w /usr/share/wordlists/dirb/common.txt", "Directory brute force"),
+            ("nikto -h {url}", "Web vulnerability scan"),
+            ("whatweb {url}", "Identify web technologies"),
+            ("wpscan --url {url} -e u,vp,vt", "WordPress scan"),
+            ("sqlmap -u '{url}?id=1' --batch", "SQL injection test"),
+        ],
+        "SMB/Windows": [
+            ("smbclient -L //{target}/ -N", "List SMB shares (null session)"),
+            ("smbmap -H {target}", "SMB share permissions"),
+            ("enum4linux -a {target}", "Full SMB enumeration"),
+            ("crackmapexec smb {target} --shares", "CME share enum"),
+        ],
+        "Password Attacks": [
+            ("hydra -L users.txt -P pass.txt ssh://{target}", "SSH brute force"),
+            ("hydra -L users.txt -P pass.txt ftp://{target}", "FTP brute force"),
+            ("john --wordlist=/usr/share/wordlists/rockyou.txt hashes.txt", "Crack hashes"),
+        ],
+        "Privilege Escalation": [
+            ("find / -perm -4000 2>/dev/null", "Find SUID binaries"),
+            ("sudo -l", "Check sudo permissions"),
+            ("cat /etc/crontab", "Check cron jobs"),
+            ("getcap -r / 2>/dev/null", "Find capabilities"),
+        ],
+    }
+    
+    for group, commands in task_groups.items():
+        lines.append(f"### {group}")
+        for cmd, desc in commands:
+            lines.append(f"- `{cmd}` - {desc}")
         lines.append("")
     
     return "\n".join(lines)

@@ -3,7 +3,7 @@ Agent Response Types
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 
 @dataclass
@@ -14,7 +14,7 @@ class AgentResponse:
     content: str = ""
     question: str = ""  # For choice type
     options: list[str] = field(default_factory=list)  # For choice type
-    data: Optional[dict[str, Any]] = None  # Additional structured data
+    data: dict[str, Any] | None = None  # Additional structured data
     
     def is_terminal(self) -> bool:
         """Check if this is a terminal response (done or error)."""

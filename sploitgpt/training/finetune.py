@@ -5,15 +5,16 @@ Uses unsloth + LoRA to fine-tune a base model on security data.
 Runs automatically on first install (~30 min on consumer GPU).
 """
 
-import json
-import os
+from __future__ import annotations
+
+import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
-import subprocess
+from typing import Any
+import os
 
 
-def check_gpu_available() -> dict:
+def check_gpu_available() -> dict[str, Any]:
     """Check if GPU is available and get specs."""
     try:
         import torch
@@ -36,7 +37,7 @@ def check_gpu_available() -> dict:
         return {"available": False, "reason": str(e)}
 
 
-def get_recommended_model(gpu_memory_gb: float) -> tuple[str, dict]:
+def get_recommended_model(gpu_memory_gb: float) -> tuple[str, dict[str, Any]]:
     """Get recommended base model based on GPU memory."""
     
     if gpu_memory_gb >= 24:
@@ -76,9 +77,10 @@ def get_recommended_model(gpu_memory_gb: float) -> tuple[str, dict]:
 def run_finetuning(
     training_data: Path,
     output_dir: Path,
-    base_model: Optional[str] = None,
+    base_model: str | None = None,
     epochs: int = 3,
     learning_rate: float = 2e-4,
+    export_gguf: bool = True,
 ) -> bool:
     """
     Run LoRA fine-tuning on the base model.
@@ -94,12 +96,13 @@ def run_finetuning(
         True if successful, False otherwise
     """
     try:
+        os.environ.setdefault("UNSLOTH_RETURN_LOGITS", "1")
+        import torch
+        from datasets import load_dataset
+        from trl import SFTConfig
+        from trl.trainer.sft_trainer import SFTTrainer
         from unsloth import FastLanguageModel
         from unsloth.chat_templates import get_chat_template
-        from datasets import load_dataset
-        from trl import SFTTrainer
-        from transformers import TrainingArguments
-        import torch
     except ImportError as e:
         print(f"❌ Missing dependency: {e}")
         print("   Run: pip install unsloth datasets trl")
@@ -153,29 +156,31 @@ def run_finetuning(
         tokenizer,
         chat_template="chatml",
     )
-    
+    if tokenizer.pad_token in (None, "<PAD_TOKEN>", "<|PAD_TOKEN|>"):
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
     # Load training data
     print(f"📚 Loading training data from {training_data}...")
     dataset = load_dataset("json", data_files=str(training_data), split="train")
-    
-    def format_example(example):
-        """Format example for training."""
+
+    def formatting_func(example: dict[Any, Any]) -> str:
+        """Format a dataset row into a chat-formatted training string."""
         messages = example.get("messages", [])
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=False,
+        return str(
+            tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=False,
+            )
         )
-        return {"text": text}
-    
-    dataset = dataset.map(format_example, remove_columns=dataset.column_names)
-    
+
     print(f"   {len(dataset)} training examples loaded")
     
     # Training arguments
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         output_dir=str(output_dir / "checkpoints"),
         per_device_train_batch_size=config["batch_size"],
         gradient_accumulation_steps=config["gradient_accumulation"],
@@ -190,16 +195,20 @@ def run_finetuning(
         weight_decay=0.01,
         lr_scheduler_type="linear",
         seed=42,
+        use_liger_kernel=False,
+        eos_token=tokenizer.eos_token,
+        pad_token=tokenizer.pad_token or tokenizer.eos_token,
     )
-    
+    training_args.eos_token = tokenizer.eos_token
+    training_args.pad_token = tokenizer.pad_token
+
     # Create trainer
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
-        train_dataset=dataset,
-        dataset_text_field="text",
-        max_seq_length=config["max_seq_length"],
         args=training_args,
+        train_dataset=dataset,
+        processing_class=tokenizer,
+        formatting_func=formatting_func,
     )
     
     # Train!
@@ -224,14 +233,17 @@ def run_finetuning(
     )
     
     # Export to GGUF for Ollama
-    print("📦 Exporting to GGUF format...")
-    model.save_pretrained_gguf(
-        output_dir / "gguf",
-        tokenizer,
-        quantization_method="q4_k_m",
-    )
+    if export_gguf:
+        print("📦 Exporting to GGUF format...")
+        model.save_pretrained_gguf(
+            output_dir / "gguf",
+            tokenizer,
+            quantization_method="q4_k_m",
+        )
+    else:
+        print("⚠️  Skipping GGUF export (omit --skip-gguf to generate it here).")
     
-    print(f"\n✅ Fine-tuning complete!")
+    print("\n✅ Fine-tuning complete!")
     print(f"   LoRA adapters: {output_dir / 'lora'}")
     print(f"   Merged model: {output_dir / 'merged'}")
     print(f"   GGUF model: {output_dir / 'gguf'}")
@@ -303,7 +315,7 @@ def register_with_ollama(gguf_dir: Path, model_name: str = "sploitgpt") -> bool:
         return False
 
 
-async def main():
+async def main() -> None:
     """CLI entry point for fine-tuning."""
     import argparse
     
@@ -328,6 +340,11 @@ async def main():
         type=int,
         default=3,
         help="Number of training epochs"
+    )
+    parser.add_argument(
+        "--skip-gguf",
+        action="store_true",
+        help="Skip exporting a GGUF (useful when disk space is limited; you can export later)",
     )
     parser.add_argument(
         "--register",
@@ -364,6 +381,7 @@ async def main():
         output_dir=Path(args.output),
         base_model=args.model,
         epochs=args.epochs,
+        export_gguf=not args.skip_gguf,
     )
     
     if success and args.register:

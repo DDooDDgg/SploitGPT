@@ -4,22 +4,18 @@ Atomic Red Team Integration
 Parses Atomic Red Team tests to get executable commands for each technique.
 """
 
-import os
-import yaml
-from pathlib import Path
-from typing import Optional
+
+from typing import Any
 
 import httpx
-
-from sploitgpt.core.config import get_settings
-
+import yaml  # type: ignore[import-untyped]
 
 # Atomic Red Team repository
 ATOMIC_REPO_URL = "https://github.com/redcanaryco/atomic-red-team.git"
 ATOMIC_ATOMICS_URL = "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/{technique_id}/{technique_id}.yaml"
 
 
-async def download_atomic_test(technique_id: str) -> Optional[dict]:
+async def download_atomic_test(technique_id: str) -> dict[str, Any] | None:
     """Download atomic test for a specific technique."""
     url = ATOMIC_ATOMICS_URL.format(technique_id=technique_id)
     
@@ -30,17 +26,18 @@ async def download_atomic_test(technique_id: str) -> Optional[dict]:
                 return None
             response.raise_for_status()
             
-            return yaml.safe_load(response.text)
+            loaded = yaml.safe_load(response.text)
+            return loaded if isinstance(loaded, dict) else None
     except Exception:
         return None
 
 
-def parse_atomic_tests(data: dict) -> list[dict]:
+def parse_atomic_tests(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse atomic test YAML into command structures."""
     if not data:
         return []
     
-    tests = []
+    tests: list[dict[str, Any]] = []
     
     for test in data.get("atomic_tests", []):
         # Filter for Linux-compatible tests
@@ -77,7 +74,7 @@ def parse_atomic_tests(data: dict) -> list[dict]:
     return tests
 
 
-async def get_commands_for_technique(technique_id: str) -> list[dict]:
+async def get_commands_for_technique(technique_id: str) -> list[dict[str, Any]]:
     """Get executable commands for a MITRE ATT&CK technique."""
     # Normalize technique ID (T1046 -> T1046, T1021.001 -> T1021.001)
     technique_id = technique_id.upper()
@@ -89,7 +86,7 @@ async def get_commands_for_technique(technique_id: str) -> list[dict]:
     return parse_atomic_tests(data)
 
 
-def format_commands_for_agent(tests: list[dict], target: str = "") -> str:
+def format_commands_for_agent(tests: list[dict[str, Any]], target: str = "") -> str:
     """Format atomic tests as readable options for the agent."""
     if not tests:
         return "No pre-built commands available for this technique."
@@ -105,11 +102,11 @@ def format_commands_for_agent(tests: list[dict], target: str = "") -> str:
         
         lines.append(f"**Option {i}: {test['name']}**")
         lines.append(f"  {test['description'][:100]}...")
-        lines.append(f"  ```")
+        lines.append("  ```")
         lines.append(f"  {command[:200]}{'...' if len(command) > 200 else ''}")
-        lines.append(f"  ```")
+        lines.append("  ```")
         if test["elevation_required"]:
-            lines.append(f"  ⚠️ Requires root/sudo")
+            lines.append("  ⚠️ Requires root/sudo")
         lines.append("")
     
     return "\n".join(lines)
@@ -143,7 +140,7 @@ TECHNIQUE_TOOLS = {
 }
 
 
-def get_tool_commands(technique_id: str, target: str = "{target}") -> list[dict]:
+def get_tool_commands(technique_id: str, target: str = "{target}") -> list[dict[str, str]]:
     """Get Kali tool commands for a technique."""
     technique_id = technique_id.upper()
     
@@ -154,7 +151,7 @@ def get_tool_commands(technique_id: str, target: str = "{target}") -> list[dict]
         commands = TECHNIQUE_TOOLS.get(parent_id, [])
     
     # Substitute target
-    result = []
+    result: list[dict[str, str]] = []
     for cmd in commands:
         result.append({
             **cmd,

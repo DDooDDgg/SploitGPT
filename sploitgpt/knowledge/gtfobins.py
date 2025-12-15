@@ -6,21 +6,20 @@ Data sourced from https://gtfobins.github.io/
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class GTFOBin:
     """A GTFOBins entry with privesc techniques."""
     name: str
-    suid: Optional[str] = None
-    sudo: Optional[str] = None
-    shell: Optional[str] = None
-    file_read: Optional[str] = None
-    file_write: Optional[str] = None
-    reverse_shell: Optional[str] = None
-    bind_shell: Optional[str] = None
-    capabilities: Optional[str] = None
+    suid: str | None = None
+    sudo: str | None = None
+    shell: str | None = None
+    file_read: str | None = None
+    file_write: str | None = None
+    reverse_shell: str | None = None
+    bind_shell: str | None = None
+    capabilities: str | None = None
 
 
 # Common GTFOBins entries - a curated subset
@@ -248,7 +247,7 @@ GTFOBINS_DB: dict[str, GTFOBin] = {
 }
 
 
-def find_suid_escalation(binary: str) -> Optional[str]:
+def find_suid_escalation(binary: str) -> str | None:
     """Find SUID privesc technique for a binary."""
     binary_name = binary.split("/")[-1].lower()
     if binary_name in GTFOBINS_DB:
@@ -256,7 +255,7 @@ def find_suid_escalation(binary: str) -> Optional[str]:
     return None
 
 
-def find_sudo_escalation(binary: str) -> Optional[str]:
+def find_sudo_escalation(binary: str) -> str | None:
     """Find sudo privesc technique for a binary."""
     binary_name = binary.split("/")[-1].lower()
     if binary_name in GTFOBINS_DB:
@@ -264,7 +263,7 @@ def find_sudo_escalation(binary: str) -> Optional[str]:
     return None
 
 
-def find_reverse_shell(binary: str, rhost: str, rport: int) -> Optional[str]:
+def find_reverse_shell(binary: str, rhost: str, rport: int) -> str | None:
     """Get reverse shell command for a binary."""
     binary_name = binary.split("/")[-1].lower()
     if binary_name in GTFOBINS_DB:
@@ -274,7 +273,7 @@ def find_reverse_shell(binary: str, rhost: str, rport: int) -> Optional[str]:
     return None
 
 
-def get_privesc_options(binaries: list[str], method: str = "suid") -> list[dict]:
+def get_privesc_options(binaries: list[str], method: str = "suid") -> list[dict[str, str]]:
     """
     Get privesc options for a list of binaries.
     
@@ -285,7 +284,7 @@ def get_privesc_options(binaries: list[str], method: str = "suid") -> list[dict]
     Returns:
         List of {binary, technique, command} dicts
     """
-    options = []
+    options: list[dict[str, str]] = []
     
     for binary in binaries:
         binary_name = binary.split("/")[-1].lower()
@@ -327,9 +326,28 @@ def format_privesc_for_agent(binaries: list[str]) -> str:
     
     for i, opt in enumerate(suid_options, 1):
         lines.append(f"**Option {i}: {opt['binary']}**")
-        lines.append(f"```bash")
+        lines.append("```bash")
         lines.append(f"{opt['command']}")
-        lines.append(f"```")
+        lines.append("```")
         lines.append("")
     
     return "\n".join(lines)
+
+
+async def download_gtfobins_data(force: bool = False) -> int:
+    """Ensure GTFOBins data is available locally.
+
+    Today SploitGPT ships a curated in-code subset of GTFOBins to avoid
+    network dependencies at runtime.
+
+    This async function exists to keep the installer compatible.
+
+    Args:
+        force: Reserved for future use (re-download full dataset).
+
+    Returns:
+        Number of GTFOBins entries available.
+    """
+
+    _ = force
+    return len(GTFOBINS_DB)

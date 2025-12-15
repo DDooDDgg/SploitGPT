@@ -10,46 +10,47 @@ Builds rich context for the agent using:
 - Payload generation
 """
 
-from typing import Optional, Any
 
 from sploitgpt.knowledge import (
-    search_techniques,
     get_techniques_for_service,
 )
-from sploitgpt.knowledge.gtfobins import (
-    find_suid_escalation,
-    find_sudo_escalation,
-    find_reverse_shell,
+from sploitgpt.knowledge.atomic import (
+    format_commands_for_agent as format_atomic_commands,
 )
 from sploitgpt.knowledge.atomic import (
     get_tool_commands,
-    format_commands_for_agent as format_atomic_commands,
+)
+from sploitgpt.knowledge.gtfobins import (
+    find_sudo_escalation,
+    find_suid_escalation,
 )
 from sploitgpt.tools.commands import (
-    get_command,
-    search_commands,
     format_commands_for_agent,
 )
-from sploitgpt.tools.wordlists import (
-    get_wordlists_for_task,
-    format_wordlist_suggestions,
-)
 from sploitgpt.tools.payloads import (
-    generate_reverse_shells,
     format_reverse_shells_for_agent,
+)
+from sploitgpt.tools.wordlists import (
+    format_wordlist_suggestions,
 )
 
 
 class ContextBuilder:
     """Builds context for the agent based on the current situation."""
     
-    def __init__(self):
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset context to default for a new session."""
+
         self.discovered_services: list[str] = []
         self.discovered_hosts: list[str] = []
         self.current_phase: str = "recon"
         self.lhost: str = ""
         self.lport: int = 4444
         self.target: str = ""
+        self.suid_binaries: list[str] = []
     
     def set_target(self, target: str) -> None:
         """Set the current target."""
@@ -115,26 +116,24 @@ class ContextBuilder:
         task = phase_to_task.get(self.current_phase, "web")
         return format_wordlist_suggestions(task)
     
-    def get_privesc_context(self, binaries: list[str]) -> str:
+    def get_privesc_context(self, binaries: list[str] = None) -> str:
         """Get privilege escalation techniques for discovered SUID/sudo binaries."""
+        if binaries is None:
+            binaries = self.suid_binaries
         if not binaries:
             return ""
-        
         context_parts = ["## Privilege Escalation Opportunities\n"]
-        
         for binary in binaries[:10]:  # Limit
             # Check SUID
             suid_tech = find_suid_escalation(binary)
             if suid_tech:
                 context_parts.append(f"### SUID: {binary}")
-                context_parts.append(f"```bash\n{suid_tech['command']}\n```")
-            
+                context_parts.append(f"```bash\n{suid_tech}\n```")
             # Check sudo
             sudo_tech = find_sudo_escalation(binary)
             if sudo_tech:
                 context_parts.append(f"### Sudo: {binary}")
-                context_parts.append(f"```bash\n{sudo_tech['command']}\n```")
-        
+                context_parts.append(f"```bash\n{sudo_tech}\n```")
         return "\n".join(context_parts)
     
     def get_reverse_shell_context(self) -> str:
@@ -175,7 +174,7 @@ class ContextBuilder:
 
 
 # Singleton for easy access
-_context_builder: Optional[ContextBuilder] = None
+_context_builder: ContextBuilder | None = None
 
 
 def get_context_builder() -> ContextBuilder:
@@ -187,11 +186,11 @@ def get_context_builder() -> ContextBuilder:
 
 
 def build_dynamic_context(
-    target: Optional[str] = None,
-    services: Optional[list[str]] = None,
+    target: str | None = None,
+    services: list[str] | None = None,
     phase: str = "recon",
-    lhost: Optional[str] = None,
-    binaries: Optional[list[str]] = None,
+    lhost: str | None = None,
+    binaries: list[str] | None = None,
 ) -> str:
     """
     Build dynamic context based on current pentest state.

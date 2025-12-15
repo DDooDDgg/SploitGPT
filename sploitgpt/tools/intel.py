@@ -5,15 +5,17 @@ vulnerabilities, and credentials throughout the engagement.
 """
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 
 from . import register_tool
 
 # Global intel store
-_intel_file: Path = Path("loot/intel.json")
+from sploitgpt.core.config import get_settings
+
+_intel_file: Path = get_settings().loot_dir / "intel.json"
 
 
 @dataclass
@@ -24,7 +26,7 @@ class Service:
     service: str = ""
     version: str = ""
     banner: str = ""
-    vulnerabilities: List[str] = field(default_factory=list)
+    vulnerabilities: list[str] = field(default_factory=list)
 
 
 @dataclass 
@@ -46,20 +48,20 @@ class Host:
     hostname: str = ""
     os: str = ""
     os_version: str = ""
-    services: Dict[int, Service] = field(default_factory=dict)
-    notes: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)  # e.g., "domain_controller", "web_server"
+    services: dict[int, Service] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)  # e.g., "domain_controller", "web_server"
     
 
 @dataclass
 class Intel:
     """Full intelligence store for an engagement."""
     target: str = ""
-    scope: List[str] = field(default_factory=list)
-    hosts: Dict[str, Host] = field(default_factory=dict)
-    credentials: List[Credential] = field(default_factory=list)
-    findings: List[str] = field(default_factory=list)  # High-level findings
-    attack_path: List[str] = field(default_factory=list)  # Kill chain steps taken
+    scope: list[str] = field(default_factory=list)
+    hosts: dict[str, Host] = field(default_factory=dict)
+    credentials: list[Credential] = field(default_factory=list)
+    findings: list[str] = field(default_factory=list)  # High-level findings
+    attack_path: list[str] = field(default_factory=list)  # Kill chain steps taken
     updated_at: str = ""
 
 
@@ -68,6 +70,8 @@ def _load_intel() -> Intel:
     if _intel_file.exists():
         try:
             data = json.loads(_intel_file.read_text())
+            if not isinstance(data, dict):
+                return Intel()
             intel = Intel(
                 target=data.get("target", ""),
                 scope=data.get("scope", []),
@@ -103,7 +107,7 @@ def _save_intel(intel: Intel) -> None:
     intel.updated_at = datetime.now().isoformat()
     
     # Convert to JSON-serializable format
-    data = {
+    data: dict[str, Any] = {
         "target": intel.target,
         "scope": intel.scope,
         "findings": intel.findings,
@@ -114,7 +118,7 @@ def _save_intel(intel: Intel) -> None:
     }
     
     for ip, host in intel.hosts.items():
-        host_data = {
+        host_data: dict[str, Any] = {
             "hostname": host.hostname,
             "os": host.os,
             "os_version": host.os_version,
@@ -122,12 +126,18 @@ def _save_intel(intel: Intel) -> None:
             "tags": host.tags,
             "services": {},
         }
+        services_data: dict[str, Any] = {}
         for port, svc in host.services.items():
-            host_data["services"][str(port)] = asdict(svc)
-        data["hosts"][ip] = host_data
+            services_data[str(port)] = asdict(svc)
+        host_data["services"] = services_data
+        hosts_data = data.setdefault("hosts", {})
+        if isinstance(hosts_data, dict):
+            hosts_data[ip] = host_data
     
-    for cred in intel.credentials:
-        data["credentials"].append(asdict(cred))
+    creds_data = data.setdefault("credentials", [])
+    if isinstance(creds_data, list):
+        for cred in intel.credentials:
+            creds_data.append(asdict(cred))
     
     _intel_file.parent.mkdir(parents=True, exist_ok=True)
     _intel_file.write_text(json.dumps(data, indent=2))
@@ -418,7 +428,7 @@ async def intel(
             if cred.password:
                 cred_line += f":{cred.password}"
             elif cred.hash:
-                cred_line += f" (hash)"
+                cred_line += " (hash)"
             if cred.host:
                 cred_line += f" @ {cred.host}"
             if cred.service:

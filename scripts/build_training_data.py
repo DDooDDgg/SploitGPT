@@ -12,22 +12,18 @@ Output: JSONL format for LoRA fine-tuning
 
 import asyncio
 import json
-import re
-from pathlib import Path
-from datetime import datetime
-from typing import Generator
 
 # Import our knowledge modules
 import sys
+from collections.abc import Generator
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sploitgpt.knowledge.attack import AttackKnowledge
 from sploitgpt.knowledge.atomic import (
-    get_commands_for_technique,
     get_tool_commands,
-    format_commands_for_agent,
 )
-
+from sploitgpt.knowledge.attack import AttackKnowledge
 
 # Training example templates
 SYSTEM_PROMPT = """You are SploitGPT, an autonomous penetration testing assistant running inside a Kali Linux container. You help security professionals conduct authorized penetration tests.

@@ -1,0 +1,29 @@
+*** Begin Patch
+*** Update File: /home/cheese/SploitGPT/sploitgpt/agent/agent.py
+@@
+-        for attempt in range(2):
+-            try:
+-                async with OllamaClient() as client:
+-                    response = await client.chat(
+-                        messages,
+-                        stream=False,
+-                        tools=tools,
+-                    )
+-                return cast(dict[str, Any], response)
++        # Proposed change: use the LLM client factory so we can support
++        # multiple backends (Ollama, Opencode, etc.) without duplicating
++        # logic. This file change is only a proposal; don't apply until
++        # reviewed.
++        from sploitgpt.core.llm import get_llm_client
++
++        for attempt in range(2):
++            try:
++                client = get_llm_client(model=self.settings.effective_model)
++                async with client as c:
++                    response = await c.chat(
++                        messages,
++                        stream=False,
++                        tools=tools,
++                    )
++                return cast(dict[str, Any], response)
+*** End Patch

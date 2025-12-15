@@ -59,3 +59,6 @@ data/cache/
 *.pem
 *.key
 id_rsa*
+
+# VPN configs (local-only)
+vpn/

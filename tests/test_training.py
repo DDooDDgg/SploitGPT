@@ -3,8 +3,6 @@ Tests for training data collection and export
 """
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 

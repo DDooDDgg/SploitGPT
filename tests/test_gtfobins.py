@@ -2,13 +2,12 @@
 Tests for SploitGPT knowledge modules
 """
 
-import pytest
 from sploitgpt.knowledge.gtfobins import (
-    find_suid_escalation,
-    find_sudo_escalation,
-    find_reverse_shell,
-    get_privesc_options,
     GTFOBINS_DB,
+    find_reverse_shell,
+    find_sudo_escalation,
+    find_suid_escalation,
+    get_privesc_options,
 )
 
 

@@ -9,11 +9,12 @@ SQLite database for:
 
 import json
 import sqlite3
-from datetime import datetime
+import logging
 from pathlib import Path
-from typing import Any, Optional
 
 from sploitgpt.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_db_path() -> Path:
@@ -110,12 +111,24 @@ def init_db() -> None:
             platforms TEXT
         )
     """)
+
+    # Backward-compatible schema migration:
+    # Older versions used a different column name (e.g., tactic_id). Add the
+    # expected 'tactic' column if it's missing so newer code can function.
+    try:
+        cursor.execute("PRAGMA table_info(techniques)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if "tactic" not in existing_cols:
+            cursor.execute("ALTER TABLE techniques ADD COLUMN tactic TEXT")
+    except Exception:
+        # Best-effort migration; don't block startup if this fails.
+        logger.warning("Schema migration failed for techniques table", exc_info=True)
     
     conn.commit()
     conn.close()
 
 
-def add_host(ip: str, hostname: str = None, os: str = None) -> int:
+def add_host(ip: str, hostname: str | None = None, os: str | None = None) -> int:
     """Add or update a host."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -130,15 +143,24 @@ def add_host(ip: str, hostname: str = None, os: str = None) -> int:
         RETURNING id
     """, (ip, hostname, os))
     
-    host_id = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("Failed to insert/update host")
+    host_id = int(row[0])
     conn.commit()
     conn.close()
     
     return host_id
 
 
-def add_port(host_ip: str, port: int, protocol: str = "tcp", 
-             state: str = "open", service: str = None, version: str = None) -> None:
+def add_port(
+    host_ip: str,
+    port: int,
+    protocol: str = "tcp",
+    state: str = "open",
+    service: str | None = None,
+    version: str | None = None,
+) -> None:
     """Add a port to a host."""
     conn = get_connection()
     cursor = conn.cursor()

@@ -1,0 +1,36 @@
+*** Begin Patch
+*** Update File: /home/cheese/SploitGPT/sploitgpt/core/boot.py
+@@
+-async def check_ollama_connection() -> tuple[bool, bool]:
+-    """Check if Ollama is available and target model is present."""
+-    settings = get_settings()
+-    try:
+-        async with OllamaClient() as client:
+-            models = await client.list_models()
+-            healthy = await client.health_check()
+-
+-            return bool(models), healthy
+-    except Exception:
+-        logger.exception("Ollama connection check failed")
+-        return False, False
++async def check_ollama_connection() -> tuple[bool, bool]:
++    """Check the configured LLM backend for availability and model presence.
++
++    Proposal: use the LLM client factory to ensure boot works for non-Ollama
++    backends (e.g., Opencode) without changing TUI behavior.
++    """
++    settings = get_settings()
++    try:
++        # Use the proposed factory (review-only change)
++        from sploitgpt.core.llm import get_llm_client
++
++        client = get_llm_client(model=settings.effective_model)
++        async with client as c:
++            healthy = await c.health_check()
++            models = await c.list_models()
++
++            return bool(models), healthy
++    except Exception:
++        logger.exception("Ollama connection check failed")
++        return False, False
+*** End Patch

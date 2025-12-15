@@ -1,0 +1,6 @@
+[2025-12-13T15:27:54-05:00] Waiting for remote fine-tune job...
+[2025-12-13T15:27:54-05:00] Fine-tune complete. Syncing models...
+socket: Operation not permitted
+ssh: connect to host 86.38.238.123 port 22: failure
+rsync: connection unexpectedly closed (0 bytes received so far) [Receiver]
+rsync error: unexplained error (code 255) at io.c(232) [Receiver=3.2.7]

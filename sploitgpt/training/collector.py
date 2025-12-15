@@ -7,20 +7,21 @@ This is the "self-improving" aspect - the model learns from real usage.
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass, asdict
+from typing import Any, cast
 
 
 @dataclass
 class SessionTurn:
     """A single turn in a session conversation."""
+
     role: str  # user, assistant, tool
     content: str
-    tool_calls: Optional[list] = None
-    tool_name: Optional[str] = None
-    timestamp: Optional[str] = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_name: str | None = None
+    timestamp: str | None = None
 
 
 @dataclass  
@@ -29,7 +30,7 @@ class SessionFeedback:
     session_id: str
     rating: int  # 1-5
     successful: bool  # Did the task succeed?
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class SessionCollector:
@@ -44,7 +45,7 @@ class SessionCollector:
         self.db_path = db_path
         self._init_db()
     
-    def _init_db(self):
+    def _init_db(self) -> None:
         """Initialize the sessions database."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -85,7 +86,7 @@ class SessionCollector:
             )
         return session_id
     
-    def add_turn(self, session_id: str, turn: SessionTurn):
+    def add_turn(self, session_id: str, turn: SessionTurn) -> None:
         """Add a turn to a session."""
         with sqlite3.connect(self.db_path) as conn:
             # Get next turn index
@@ -93,7 +94,8 @@ class SessionCollector:
                 "SELECT COALESCE(MAX(turn_index), -1) + 1 FROM turns WHERE session_id = ?",
                 (session_id,)
             ).fetchone()
-            turn_index = result[0]
+            assert result is not None
+            turn_index = int(result[0])
             
             conn.execute(
                 """INSERT INTO turns 
@@ -115,7 +117,7 @@ class SessionCollector:
         session_id: str,
         successful: bool = False,
         rating: int = 0,
-    ):
+    ) -> None:
         """End a session with feedback."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
@@ -125,7 +127,7 @@ class SessionCollector:
                 (datetime.now().isoformat(), int(successful), rating, session_id)
             )
     
-    def get_session(self, session_id: str) -> Optional[dict]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         """Get a session with all its turns."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -186,25 +188,29 @@ class SessionCollector:
             
             with open(output_path, "a") as f:
                 for session_row in sessions:
-                    session_id = session_row["id"]
+                    session_id = str(session_row["id"])
                     session_data = self.get_session(session_id)
-                    
+
                     if not session_data or not session_data["turns"]:
                         continue
-                    
+
+                    turns = cast(list[dict[str, Any]], session_data["turns"])
+
                     # Convert to training format
-                    messages = self._turns_to_messages(session_data["turns"])
+                    messages = self._turns_to_messages(turns)
                     
                     if len(messages) < 2:  # Need at least user + assistant
                         continue
                     
+                    session_info = cast(dict[str, Any], session_data["session"])
+
                     example = {
                         "messages": messages,
                         "metadata": {
                             "session_id": session_id,
-                            "task": session_data["session"].get("task_description", ""),
-                            "rating": session_data["session"]["rating"],
-                        }
+                            "task": session_info.get("task_description", ""),
+                            "rating": session_info.get("rating", 0),
+                        },
                     }
                     
                     f.write(json.dumps(example) + "\n")
@@ -218,9 +224,9 @@ class SessionCollector:
             
             return count
     
-    def _turns_to_messages(self, turns: list[dict]) -> list[dict]:
+    def _turns_to_messages(self, turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert database turns to message format."""
-        messages = [
+        messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": self._get_system_prompt(),
@@ -235,7 +241,7 @@ class SessionCollector:
                 messages.append({"role": "user", "content": content})
             
             elif role == "assistant":
-                msg = {"role": "assistant", "content": content}
+                msg: dict[str, Any] = {"role": "assistant", "content": content}
                 
                 # Add tool calls if present
                 if turn["tool_calls"]:
@@ -268,29 +274,39 @@ You have access to these tools:
 
 Always ask before running exploits or intrusive actions. Gather information first, then suggest attack paths."""
     
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, int]:
         """Get collection statistics."""
         with sqlite3.connect(self.db_path) as conn:
-            stats = {}
+            stats: dict[str, int] = {}
             
-            stats["total_sessions"] = conn.execute(
-                "SELECT COUNT(*) FROM sessions"
-            ).fetchone()[0]
+            stats["total_sessions"] = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM sessions"
+                ).fetchone()[0]
+            )
             
-            stats["successful_sessions"] = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE successful = 1"
-            ).fetchone()[0]
+            stats["successful_sessions"] = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM sessions WHERE successful = 1"
+                ).fetchone()[0]
+            )
             
-            stats["high_rated_sessions"] = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE rating >= 4"
-            ).fetchone()[0]
+            stats["high_rated_sessions"] = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM sessions WHERE rating >= 4"
+                ).fetchone()[0]
+            )
             
-            stats["exported_sessions"] = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE exported = 1"
-            ).fetchone()[0]
+            stats["exported_sessions"] = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM sessions WHERE exported = 1"
+                ).fetchone()[0]
+            )
             
-            stats["total_turns"] = conn.execute(
-                "SELECT COUNT(*) FROM turns"
-            ).fetchone()[0]
+            stats["total_turns"] = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM turns"
+                ).fetchone()[0]
+            )
             
             return stats
