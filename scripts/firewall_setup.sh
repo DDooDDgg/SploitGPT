@@ -5,10 +5,10 @@
 # ┌─────────────────────────────────────────────────────────────────┐
 # │                           HOST                                   │
 # │  ┌─────────────────┐                                            │
-# │  │ Ollama          │ ← Binds to 172.17.0.1 (Docker bridge only) │
+# │  │ Ollama          │ ← Binds to container bridge only          │
 # │  │ Port 11434      │                                            │
 # │  └────────▲────────┘                                            │
-# │           │ Docker bridge (172.17.0.0/16)                       │
+# │           │ Container bridge (varies by engine)                 │
 # │  ┌────────┴────────────────────────────────────────────────┐   │
 # │  │              SploitGPT Container                         │   │
 # │  │  ┌──────────────┐  ┌─────────────────────────────────┐  │   │
@@ -25,7 +25,7 @@
 #                              Internet (via Mullvad VPN)
 #
 # Security Rules:
-# 1. Ollama (11434): ONLY accessible from Docker bridge (172.17.0.0/16)
+# 1. Ollama (11434): ONLY accessible from the container bridge subnet
 # 2. MSF RPC (55553): Runs inside container on 127.0.0.1 (no external access)
 # 3. Container uses host networking → shares VPN tunnel
 # 4. Inbound blocked by default (UFW default deny)
@@ -35,8 +35,38 @@ set -e
 # Configuration
 OLLAMA_PORT=11434
 MSF_PORT=55553
-DOCKER_BRIDGE="172.17.0.0/16"
-DOCKER_BRIDGE_IP="172.17.0.1"
+CONTAINER_BRIDGE="172.17.0.0/16"
+CONTAINER_BRIDGE_IP="172.17.0.1"
+
+# Podman default network (best-effort): prefer its gateway/subnet when available.
+if command -v podman >/dev/null 2>&1; then
+    if podman network inspect podman >/dev/null 2>&1; then
+        DETECTED="$(
+            podman network inspect podman 2>/dev/null \
+            | python3 - <<'PY'
+import json, sys
+data = json.load(sys.stdin)
+if isinstance(data, list) and data:
+    data = data[0]
+subnets = data.get("subnets") or []
+subnet = ""
+gateway = ""
+if subnets and isinstance(subnets[0], dict):
+    subnet = (subnets[0].get("subnet") or "").strip()
+    gateway = (subnets[0].get("gateway") or "").strip()
+print(f"{subnet}|{gateway}".strip("|"))
+PY
+        )"
+        DETECTED_SUBNET="${DETECTED%%|*}"
+        DETECTED_GW="${DETECTED#*|}"
+        if [ -n "$DETECTED_SUBNET" ] && [ "$DETECTED_SUBNET" != "$DETECTED" ]; then
+            CONTAINER_BRIDGE="$DETECTED_SUBNET"
+        fi
+        if [ -n "$DETECTED_GW" ] && [ "$DETECTED_GW" != "$DETECTED" ]; then
+            CONTAINER_BRIDGE_IP="$DETECTED_GW"
+        fi
+    fi
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -74,18 +104,18 @@ fi
 echo ""
 echo -e "${CYAN}[2/5]${NC} Configuring Ollama binding..."
 
-# Configure Ollama to bind to Docker bridge only
+# Configure Ollama to bind to container bridge only
 mkdir -p /etc/systemd/system/ollama.service.d
 
 cat > /etc/systemd/system/ollama.service.d/override.conf << EOF
 [Service]
-Environment="OLLAMA_HOST=${DOCKER_BRIDGE_IP}"
+Environment="OLLAMA_HOST=${CONTAINER_BRIDGE_IP}"
 EOF
 
 systemctl daemon-reload
 systemctl restart ollama 2>/dev/null || echo -e "  ${YELLOW}!${NC} Ollama service not found (may not be installed as service)"
 
-echo -e "  ${GREEN}✓${NC} Ollama configured to bind to ${DOCKER_BRIDGE_IP}"
+echo -e "  ${GREEN}✓${NC} Ollama configured to bind to ${CONTAINER_BRIDGE_IP}"
 
 echo ""
 echo -e "${CYAN}[3/5]${NC} Configuring firewall rules..."
@@ -99,15 +129,15 @@ configure_ufw() {
     # Remove any existing Ollama rules to avoid duplicates
     ufw delete allow $OLLAMA_PORT/tcp 2>/dev/null || true
     ufw delete deny $OLLAMA_PORT/tcp 2>/dev/null || true
-    ufw delete allow from $DOCKER_BRIDGE to any port $OLLAMA_PORT proto tcp 2>/dev/null || true
+    ufw delete allow from $CONTAINER_BRIDGE to any port $OLLAMA_PORT proto tcp 2>/dev/null || true
     
-    # Add Ollama rules: Allow from Docker, deny from everywhere else
+    # Add Ollama rules: Allow from container bridge, deny from everywhere else
     # UFW processes rules in order, first match wins
-    ufw insert 1 allow from $DOCKER_BRIDGE to any port $OLLAMA_PORT proto tcp comment "Ollama - Docker only" > /dev/null
+    ufw insert 1 allow from $CONTAINER_BRIDGE to any port $OLLAMA_PORT proto tcp comment "Ollama - containers only" > /dev/null
     ufw insert 2 deny $OLLAMA_PORT/tcp comment "Ollama - Block external" > /dev/null
     
-    # Allow Docker bridge traffic in general (for container communication)
-    ufw allow from $DOCKER_BRIDGE comment "Docker bridge" > /dev/null 2>&1 || true
+    # Allow container bridge traffic in general (for container communication)
+    ufw allow from $CONTAINER_BRIDGE comment "Container bridge" > /dev/null 2>&1 || true
     
     # IMPORTANT: Allow libvirt/KVM virtual machine networking
     # This allows VMs on virbr0/virbr1 to communicate (DHCP, DNS, etc.)
@@ -127,10 +157,10 @@ configure_ufw() {
 
 configure_firewalld() {
     echo "  Configuring firewalld..."
-    # Create docker zone
-    firewall-cmd --permanent --new-zone=docker 2>/dev/null || true
-    firewall-cmd --permanent --zone=docker --add-source=$DOCKER_BRIDGE
-    firewall-cmd --permanent --zone=docker --add-port=$OLLAMA_PORT/tcp
+    # Create containers zone
+    firewall-cmd --permanent --new-zone=containers 2>/dev/null || true
+    firewall-cmd --permanent --zone=containers --add-source=$CONTAINER_BRIDGE
+    firewall-cmd --permanent --zone=containers --add-port=$OLLAMA_PORT/tcp
     
     # Remove from public
     firewall-cmd --permanent --zone=public --remove-port=$OLLAMA_PORT/tcp 2>/dev/null || true
@@ -141,8 +171,8 @@ configure_firewalld() {
 
 configure_iptables() {
     echo "  Configuring iptables..."
-    # Allow Ollama from Docker bridge
-    iptables -I INPUT -p tcp --dport $OLLAMA_PORT -s $DOCKER_BRIDGE -j ACCEPT
+    # Allow Ollama from container bridge
+    iptables -I INPUT -p tcp --dport $OLLAMA_PORT -s $CONTAINER_BRIDGE -j ACCEPT
     
     # Drop Ollama from everywhere else
     iptables -A INPUT -p tcp --dport $OLLAMA_PORT -j DROP
@@ -177,8 +207,8 @@ echo -e "${CYAN}[4/5]${NC} Verifying configuration..."
 sleep 2  # Wait for Ollama to restart
 OLLAMA_LISTEN=$(ss -tlnp 2>/dev/null | grep ":$OLLAMA_PORT" || true)
 
-if echo "$OLLAMA_LISTEN" | grep -q "$DOCKER_BRIDGE_IP"; then
-    echo -e "  ${GREEN}✓${NC} Ollama listening on ${DOCKER_BRIDGE_IP}:${OLLAMA_PORT}"
+if echo "$OLLAMA_LISTEN" | grep -q "$CONTAINER_BRIDGE_IP"; then
+    echo -e "  ${GREEN}✓${NC} Ollama listening on ${CONTAINER_BRIDGE_IP}:${OLLAMA_PORT}"
 elif echo "$OLLAMA_LISTEN" | grep -q "0.0.0.0"; then
     echo -e "  ${YELLOW}!${NC} Ollama on 0.0.0.0 (firewall will protect)"
 else
@@ -189,11 +219,11 @@ fi
 echo ""
 echo -e "${CYAN}[5/5]${NC} Testing security..."
 
-# Test from Docker bridge (should work)
-if curl -s --max-time 3 "http://${DOCKER_BRIDGE_IP}:${OLLAMA_PORT}/api/tags" > /dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Ollama accessible from Docker bridge"
+# Test from container bridge gateway (should work)
+if curl -s --max-time 3 "http://${CONTAINER_BRIDGE_IP}:${OLLAMA_PORT}/api/tags" > /dev/null 2>&1; then
+    echo -e "  ${GREEN}✓${NC} Ollama accessible from container bridge"
 else
-    echo -e "  ${RED}✗${NC} Ollama NOT accessible from Docker bridge"
+    echo -e "  ${RED}✗${NC} Ollama NOT accessible from container bridge"
 fi
 
 # Test from localhost (should fail or timeout)
@@ -209,7 +239,7 @@ echo -e "${CYAN}║${NC}                    ${GREEN}Setup Complete${NC}         
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Security Configuration:"
-echo "  • Ollama:        ${DOCKER_BRIDGE_IP}:${OLLAMA_PORT} (Docker containers only)"
+echo "  • Ollama:        ${CONTAINER_BRIDGE_IP}:${OLLAMA_PORT} (container bridge only)"
 echo "  • MSF RPC:       127.0.0.1:${MSF_PORT} (container localhost only)"
 echo "  • Container:     Host networking (uses VPN tunnel)"
 echo "  • Inbound:       Blocked by default (UFW deny)"
@@ -220,7 +250,7 @@ echo "  • LAN access to Ollama ✓"
 echo "  • External access to MSF RPC ✓"
 echo ""
 echo "Allowed:"
-echo "  • Container → Ollama (via Docker bridge)"
+echo "  • Container → Ollama (via container bridge)"
 echo "  • Container → MSF RPC (localhost inside container)"
 echo "  • Container → Internet (via host VPN)"
 echo ""

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 class SploitGPTError(Exception):
     """Base exception for SploitGPT errors."""
-    pass
 
 
 class ConfigurationError(SploitGPTError):

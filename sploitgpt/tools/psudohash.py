@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import shlex
 from pathlib import Path
-from typing import Any
 
 from sploitgpt.core.config import get_settings
 from sploitgpt.tools import register_tool, terminal
@@ -62,7 +60,7 @@ async def generate_wordlist(
     cmd += ["--minlen", str(min_len), "--maxlen", str(max_len)]
 
     # psudohash prompts for confirmation; feed "y" via shell.
-    shell_cmd = f"printf 'y\\n' | " + shlex.join(cmd)
+    shell_cmd = "printf 'y\\n' | " + shlex.join(cmd)
     result = await terminal(command=shell_cmd, args=None, allow_shell=True)
 
     sample = ""

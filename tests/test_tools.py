@@ -106,9 +106,12 @@ async def test_msf_info_and_sessions_tools_mocked(monkeypatch) -> None:
                 )
             ]
 
-    import sploitgpt.msf
+    import sploitgpt.core.boot
 
-    monkeypatch.setattr(sploitgpt.msf, "get_msf_client", lambda: FakeMSF())
+    async def _fake_shared():
+        return FakeMSF()
+
+    monkeypatch.setattr(sploitgpt.core.boot, "get_shared_msf_client", _fake_shared)
 
     info = await execute_tool("msf_info", {"module": "auxiliary/scanner/portscan/tcp"})
     assert "Required options" in info

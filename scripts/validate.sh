@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/validate.sh [--docker] [--docker-build]
+Usage: scripts/validate.sh [--container] [--container-build]
 
 Runs local quality gates:
   - pytest
@@ -14,21 +14,25 @@ Runs local quality gates:
   - mypy
 
 Optional:
-  --docker        Also run scripts/smoke_docker.sh
-  --docker-build  If --docker is set, force a docker rebuild (smoke_docker.sh without --no-build)
+  --container        Also run scripts/smoke_podman.sh
+  --container-build  If --container is set, force a rebuild (smoke_podman.sh without --no-build)
+
+Legacy aliases (deprecated):
+  --docker        Alias for --container
+  --docker-build  Alias for --container-build
 USAGE
 }
 
-DO_DOCKER=false
-DO_DOCKER_BUILD=false
+DO_CONTAINER=false
+DO_CONTAINER_BUILD=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --docker)
-      DO_DOCKER=true
+    --container|--docker)
+      DO_CONTAINER=true
       ;;
-    --docker-build)
-      DO_DOCKER_BUILD=true
+    --container-build|--docker-build)
+      DO_CONTAINER_BUILD=true
       ;;
     -h|--help)
       usage
@@ -60,12 +64,12 @@ echo "[*] ruff"
 echo "[*] mypy"
 "$VENV_BIN/mypy" sploitgpt
 
-if [ "$DO_DOCKER" = true ]; then
-  echo "[*] docker smoke"
-  if [ "$DO_DOCKER_BUILD" = true ]; then
-    ./scripts/smoke_docker.sh
+if [ "$DO_CONTAINER" = true ]; then
+  echo "[*] container smoke"
+  if [ "$DO_CONTAINER_BUILD" = true ]; then
+    ./scripts/smoke_podman.sh
   else
-    ./scripts/smoke_docker.sh --no-build
+    ./scripts/smoke_podman.sh --no-build
   fi
 fi
 

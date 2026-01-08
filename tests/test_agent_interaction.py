@@ -18,6 +18,7 @@ def _stub_settings(tmp_path):
         loot_dir=tmp_path / "loot",
         effective_model="test-model",
         ollama_host="http://localhost:11434",
+        confirm_actions=True,
     )
     settings.sessions_dir.mkdir(parents=True, exist_ok=True)
     settings.data_dir.mkdir(parents=True, exist_ok=True)

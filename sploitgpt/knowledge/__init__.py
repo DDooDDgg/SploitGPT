@@ -6,12 +6,15 @@ This helps the agent understand what techniques apply to a given situation.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from sploitgpt.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # ATT&CK STIX data URL (Enterprise)
 ATTACK_STIX_URL = "https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json"
@@ -202,9 +205,9 @@ def get_techniques_for_service(service: str) -> list[dict[str, Any]]:
                 )
             conn.close()
             return results
-    except Exception:
+    except Exception as e:
         # Missing table or unexpected schema; fall back.
-        pass
+        logger.debug(f"Database service lookup failed: {e}")
 
     # Fallback: small hardcoded mapping
     SERVICE_TECHNIQUES = {

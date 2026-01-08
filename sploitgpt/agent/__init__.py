@@ -14,6 +14,6 @@ __all__ = [
     "Agent",
     "AgentResponse",
     "ContextBuilder",
-    "get_context_builder",
     "build_dynamic_context",
+    "get_context_builder",
 ]

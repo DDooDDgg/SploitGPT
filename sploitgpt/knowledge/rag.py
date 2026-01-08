@@ -16,6 +16,7 @@ import logging
 import math
 import re
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -268,7 +269,7 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
         # MITRE techniques
         if _table_exists(conn, "techniques"):
             rows = conn.execute(
-                "SELECT id, name, tactic, description, detection, platforms FROM techniques"
+                "SELECT id, name, tactic, description, detection, platforms FROM techniques ORDER BY id LIMIT 5000"
             ).fetchall()
             for r in rows:
                 tech_id = str(r["id"] or "").upper()
@@ -303,7 +304,7 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
         # Tool command templates
         if _table_exists(conn, "tool_techniques"):
             rows = conn.execute(
-                "SELECT tool_name, technique_id, command_template FROM tool_techniques"
+                "SELECT tool_name, technique_id, command_template FROM tool_techniques ORDER BY tool_name, technique_id LIMIT 3000"
             ).fetchall()
             for r in rows:
                 tool = str(r["tool_name"] or "")
@@ -329,7 +330,7 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
         # Service->technique mappings
         if _table_exists(conn, "service_techniques"):
             rows = conn.execute(
-                "SELECT service, port, technique_id, priority FROM service_techniques"
+                "SELECT service, port, technique_id, priority FROM service_techniques ORDER BY priority DESC, service LIMIT 2000"
             ).fetchall()
             for r in rows:
                 service = str(r["service"] or "").lower()
@@ -356,7 +357,7 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
         # Atomic tests (when present in DB)
         if _table_exists(conn, "atomic_tests"):
             rows = conn.execute(
-                "SELECT technique_id, name, description, executor, command, cleanup, elevation_required FROM atomic_tests"
+                "SELECT technique_id, name, description, executor, command, cleanup, elevation_required FROM atomic_tests ORDER BY technique_id LIMIT 3000"
             ).fetchall()
             for r in rows:
                 tech_id = str(r["technique_id"] or "").upper()
@@ -398,7 +399,7 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
         # GTFOBins (if present as table)
         if _table_exists(conn, "gtfobins"):
             rows = conn.execute(
-                "SELECT binary, suid, sudo, shell, file_read, file_write, reverse_shell, capabilities FROM gtfobins"
+                "SELECT binary, suid, sudo, shell, file_read, file_write, reverse_shell, capabilities FROM gtfobins ORDER BY binary LIMIT 1500"
             ).fetchall()
             for r in rows:
                 binary = str(r["binary"] or "")
@@ -426,6 +427,86 @@ def _load_sploitgpt_db_docs() -> list[RagDocument]:
                         content="\n".join(parts),
                         source=str(db_path),
                         metadata={"kind": "gtfobins", "binary": binary},
+                    )
+                )
+
+        # Kali tool discovery cards (build-time catalog).
+        # Keep these small: they are for "what tool should I use?" retrieval.
+        if _table_exists(conn, "kali_tools"):
+            rows = conn.execute(
+                "SELECT tool, package, summary, categories, exec, path FROM kali_tools"
+            ).fetchall()
+            for r in rows[:2500]:
+                tool = str(r["tool"] or "")
+                if not tool:
+                    continue
+
+                pkg = str(r["package"] or "")
+                summary = str(r["summary"] or "")
+                categories = str(r["categories"] or "")
+                exec_str = str(r["exec"] or "")
+                path = str(r["path"] or "")
+
+                tool_parts: list[str] = [f"Kali tool: {tool}"]
+                if summary:
+                    if len(summary) > 300:
+                        summary = summary[:300] + "…"
+                    tool_parts.append(f"Summary: {summary}")
+                if categories:
+                    if len(categories) > 200:
+                        categories = categories[:200] + "…"
+                    tool_parts.append(f"Categories: {categories}")
+                if pkg:
+                    tool_parts.append(f"Package: {pkg}")
+                if path:
+                    tool_parts.append(f"Path: {path}")
+                if exec_str:
+                    if len(exec_str) > 240:
+                        exec_str = exec_str[:240] + "…"
+                    tool_parts.append(f"Exec: {exec_str}")
+
+                docs.append(
+                    RagDocument(
+                        content="\n".join(tool_parts),
+                        source=str(db_path),
+                        metadata={"kind": "kali_tool", "tool": tool},
+                    )
+                )
+
+        # Cached per-tool docs (runtime-populated via tool_help).
+        # We cap the number indexed to keep BM25 build time predictable.
+        if _table_exists(conn, "kali_tool_docs"):
+            rows = conn.execute(
+                """
+                SELECT tool, kind, chunk_index, content, COALESCE(source, '') AS source
+                FROM kali_tool_docs
+                ORDER BY updated_at DESC
+                LIMIT 2000
+                """
+            ).fetchall()
+
+            for r in rows:
+                tool = str(r["tool"] or "")
+                kind = str(r["kind"] or "")
+                content = str(r["content"] or "")
+                source = str(r["source"] or "")
+                chunk_index = int(r["chunk_index"] or 0)
+
+                if not tool or not content.strip():
+                    continue
+                if len(content) > 2200:
+                    content = content[:2200] + "…"
+
+                header = f"Tool docs ({kind}) for {tool}"
+                if source:
+                    header += f" [{source}]"
+                doc_text = f"{header}\nChunk: {chunk_index}\n\n{content}".strip()
+
+                docs.append(
+                    RagDocument(
+                        content=doc_text,
+                        source=str(db_path),
+                        metadata={"kind": "kali_tool_doc", "tool": tool, "doc_kind": kind},
                     )
                 )
 
@@ -529,12 +610,15 @@ def get_rag_index(*, force_reload: bool = False) -> BM25Index:
     if _RAG_INDEX is not None and not force_reload:
         return _RAG_INDEX
 
+    start_time = time.time()
     docs: list[RagDocument] = []
     docs.extend(_load_markdown_sources())
     docs.extend(_load_sploitgpt_db_docs())
     docs.extend(_load_memory_db_docs())
 
     _RAG_INDEX = BM25Index(docs)
+    elapsed = time.time() - start_time
+    logger.info(f"RAG index built: {len(docs)} documents in {elapsed:.2f}s")
     return _RAG_INDEX
 
 
@@ -551,6 +635,16 @@ def get_retrieved_context(
     if not q:
         return ""
 
+    # Input validation (after empty check for backward compatibility)
+    if not isinstance(top_k, int):
+        raise TypeError(f"top_k must be int, got {type(top_k).__name__}")
+    if not isinstance(max_chars, int):
+        raise TypeError(f"max_chars must be int, got {type(max_chars).__name__}")
+    if top_k < 1 or top_k > 50:
+        raise ValueError(f"top_k must be between 1 and 50, got {top_k}")
+    if max_chars < 200 or max_chars > 50000:
+        raise ValueError(f"max_chars must be between 200 and 50000, got {max_chars}")
+
     # Lightly enrich query with known services/phase (helps retrieval without embeddings).
     extra: list[str] = []
     if services:
@@ -560,8 +654,11 @@ def get_retrieved_context(
 
     enriched = " ".join([q, *extra]).strip()
 
+    start_time = time.time()
     index = get_rag_index()
     hits = index.search(enriched, k=max(1, top_k))
+    elapsed_ms = (time.time() - start_time) * 1000
+    logger.debug(f"RAG query (len={len(q)}) retrieved {len(hits)} hits in {elapsed_ms:.1f}ms")
     if not hits:
         return ""
 

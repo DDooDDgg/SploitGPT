@@ -4,6 +4,7 @@ from collections.abc import Iterable
 import httpx
 import pytest
 
+from sploitgpt.core.config import get_settings
 from sploitgpt.tools import shodan
 
 
@@ -43,8 +44,10 @@ class FakeClient:
 
 
 @pytest.fixture(autouse=True)
-def shodan_key(monkeypatch):
+def shodan_env(monkeypatch, tmp_path):
     monkeypatch.setenv("SHODAN_API_KEY", "test-key")
+    monkeypatch.setenv("SPLOITGPT_BASE_DIR", str(tmp_path))
+    get_settings(reload=True)
 
 
 @pytest.fixture
@@ -89,6 +92,7 @@ async def test_shodan_handles_401(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_shodan_retries_429(monkeypatch, fast_sleep):
+    monkeypatch.setattr(shodan.random, "uniform", lambda _a, _b: 0.0)
     responses = [
         FakeResponse(429, {"error": "Rate limit"}),
         FakeResponse(200, {"total": 0, "matches": []}),
@@ -96,6 +100,41 @@ async def test_shodan_retries_429(monkeypatch, fast_sleep):
     monkeypatch.setattr(shodan, "_get_client", lambda timeout=30.0: FakeClient(responses))
 
     result = await shodan.shodan_search("port:22", limit=1)
+    assert "No results" in result  # succeeded after retry
+
+
+@pytest.mark.asyncio
+async def test_shodan_honors_retry_after(monkeypatch):
+    delays: list[float] = []
+
+    async def _sleep(delay: float):
+        delays.append(delay)
+        return None
+
+    monkeypatch.setattr(shodan.asyncio, "sleep", _sleep)
+    monkeypatch.setattr(shodan.random, "uniform", lambda _a, _b: 0.0)
+
+    responses = [
+        FakeResponse(429, {"error": "Rate limit"}, headers={"Retry-After": "10"}),
+        FakeResponse(200, {"total": 0, "matches": []}),
+    ]
+    monkeypatch.setattr(shodan, "_get_client", lambda timeout=30.0: FakeClient(responses))
+
+    result = await shodan.shodan_search("port:80")
+    assert "No results" in result
+    assert delays and delays[0] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_shodan_retries_5xx(monkeypatch, fast_sleep):
+    monkeypatch.setattr(shodan.random, "uniform", lambda _a, _b: 0.0)
+    responses = [
+        FakeResponse(503, {"error": "Temporary failure"}),
+        FakeResponse(200, {"total": 0, "matches": []}),
+    ]
+    monkeypatch.setattr(shodan, "_get_client", lambda timeout=30.0: FakeClient(responses))
+
+    result = await shodan.shodan_search("apache")
     assert "No results" in result  # succeeded after retry
 
 
@@ -118,3 +157,26 @@ async def test_shodan_api_error_payload(monkeypatch):
     )
     result = await shodan.shodan_search("apache")
     assert "API error" in result
+
+
+@pytest.mark.asyncio
+async def test_shodan_json_output(monkeypatch):
+    matches = [{
+        "ip_str": "1.2.3.4",
+        "port": 80,
+        "hostnames": ["example.com"],
+        "location": {"city": "Testville", "country_name": "US"},
+        "data": "Banner line 1\nBanner line 2",
+        "vulns": {"CVE-2020-1234": {}},
+    }]
+    monkeypatch.setattr(
+        shodan,
+        "_get_client",
+        lambda timeout=30.0: FakeClient([FakeResponse(200, {"total": 1, "matches": matches})])
+    )
+
+    result = await shodan.shodan_search("apache", output="json", limit=1)
+    data = json.loads(result)
+    assert data["query"] == "apache"
+    assert data["shown"] == 1
+    assert data["matches"][0]["ip"] == "1.2.3.4"

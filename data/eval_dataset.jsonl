@@ -1,0 +1,100 @@
+{"id": 0, "user_input": "Generate bash reverse shell to 10.0.0.1:4444", "expected_tool": "generate_payload", "expected_contains": "bash", "category": "generate_payload"}
+{"id": 1, "user_input": "Scan web vulnerabilities on target.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 2, "user_input": "I need to search for windows smb exploits", "expected_tool": "msf_search", "expected_contains": "smb", "category": "msf_search"}
+{"id": 3, "user_input": "Quick scan of 10.10.10.10", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 4, "user_input": "Scan web vulnerabilities on host-10.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 5, "user_input": "Generate bash reverse shell to 10.0.0.1:4444", "expected_tool": "generate_payload", "expected_contains": "bash", "category": "generate_payload"}
+{"id": 6, "user_input": "I need to bruteforce ssh on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 7, "user_input": "Search for Windows SMB exploits", "expected_tool": "msf_search", "expected_contains": "smb", "category": "msf_search"}
+{"id": 8, "user_input": "Bruteforce SSH on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 9, "user_input": "Can you enumerate directories on http://target.com?", "expected_tool": "terminal", "expected_contains": "gobuster", "category": "terminal"}
+{"id": 10, "user_input": "I need to enumerate ldap on domain controller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 11, "user_input": "Full TCP scan on host-10", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 12, "user_input": "Search for Windows SMB exploits", "expected_tool": "msf_search", "expected_contains": "smb", "category": "msf_search"}
+{"id": 13, "user_input": "Can you search for log4j vulnerabilities?", "expected_tool": "cve_search", "expected_contains": "log4j", "category": "cve_search"}
+{"id": 14, "user_input": "Find Tomcat exploits in Metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 15, "user_input": "Full TCP scan against target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 16, "user_input": "Enumerate subdomains of example.com", "expected_tool": "terminal", "expected_contains": "dnsrecon", "category": "terminal"}
+{"id": 17, "user_input": "Enumerate SMB on host-48 10.0.0.5", "expected_tool": "terminal", "expected_contains": "enum4linux", "category": "terminal"}
+{"id": 18, "user_input": "Can you enumerate ldap on domain controller?", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 19, "user_input": "Scan ports on 192.168.1.50", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 20, "user_input": "Look up CVE-2021-44228", "expected_tool": "cve_search", "expected_contains": "CVE-2021-44228", "category": "cve_search"}
+{"id": 21, "user_input": "Enumerate subdomains of example.com", "expected_tool": "terminal", "expected_contains": "dnsrecon", "category": "terminal"}
+{"id": 22, "user_input": "Bruteforce SSH on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 23, "user_input": "Create Python reverse shell payload", "expected_tool": "generate_payload", "expected_contains": "python", "category": "generate_payload"}
+{"id": 24, "user_input": "Can you quick scan of 10.10.10.10?", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 25, "user_input": "Fuzz web paths on https://10.0.0.1", "expected_tool": "terminal", "expected_contains": "ffuf", "category": "terminal"}
+{"id": 26, "user_input": "Search for Apache exploits", "expected_tool": "msf_search", "expected_contains": "apache", "category": "msf_search"}
+{"id": 27, "user_input": "I need to dns zone transfer on target.local", "expected_tool": "terminal", "expected_contains": "dig", "category": "terminal"}
+{"id": 28, "user_input": "I need to enumerate ldap on domain controller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 29, "user_input": "Scan web vulnerabilities on host-13.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 30, "user_input": "I need to find tomcat exploits in metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 31, "user_input": "I need to create python reverse shell payload", "expected_tool": "generate_payload", "expected_contains": "python", "category": "generate_payload"}
+{"id": 32, "user_input": "Scan web vulnerabilities on host-31.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 33, "user_input": "Scan ports against 192.168.1.50", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 34, "user_input": "Can you enumerate ldap on domain controller?", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 35, "user_input": "Can you list smb shares on 192.168.1.10?", "expected_tool": "terminal", "expected_contains": "smbclient", "category": "terminal"}
+{"id": 36, "user_input": "Can you query ldap users?", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 37, "user_input": "Generate bash reverse shell to 10.0.0.1:4444", "expected_tool": "generate_payload", "expected_contains": "bash", "category": "generate_payload"}
+{"id": 38, "user_input": "Dictiagainstary attack against FTP server", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 39, "user_input": "DNS zone transfer on target.local", "expected_tool": "terminal", "expected_contains": "dig", "category": "terminal"}
+{"id": 40, "user_input": "Can you bruteforce ssh on 192.168.1.100?", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 41, "user_input": "Scan web vulnerabilities on target.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 42, "user_input": "Can you query ldap users?", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 43, "user_input": "I need to full tcp scan on target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 44, "user_input": "Can you list smb shares on 192.168.1.10?", "expected_tool": "terminal", "expected_contains": "smbclient", "category": "terminal"}
+{"id": 45, "user_input": "Can you dns zone transfer on target.local?", "expected_tool": "terminal", "expected_contains": "dig", "category": "terminal"}
+{"id": 46, "user_input": "I need to enumerate ldap on domain controller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 47, "user_input": "Enumerate directories on http://host-24.com", "expected_tool": "terminal", "expected_contains": "gobuster", "category": "terminal"}
+{"id": 48, "user_input": "I need to enumerate ldap on domain controller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 49, "user_input": "Can you enumerate ldap on domain controller?", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 50, "user_input": "Scan web vulnerabilities against target.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 51, "user_input": "Find Tomcat exploits in Metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 52, "user_input": "Can you dictionary attack on ftp server?", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 53, "user_input": "Full TCP scan against target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 54, "user_input": "I need to bruteforce ssh on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 55, "user_input": "Search for Log4j vulnerabilities", "expected_tool": "cve_search", "expected_contains": "log4j", "category": "cve_search"}
+{"id": 56, "user_input": "I need to find tomcat exploits in metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 57, "user_input": "Bruteforce SSH on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 58, "user_input": "List SMB shares on 192.168.1.10", "expected_tool": "terminal", "expected_contains": "smbclient", "category": "terminal"}
+{"id": 59, "user_input": "Query LDAP users", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 60, "user_input": "Generate bash reverse shell to 10.0.0.1:4444", "expected_tool": "generate_payload", "expected_contains": "bash", "category": "generate_payload"}
+{"id": 61, "user_input": "Enumerate LDAP against domain cagainsttroller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 62, "user_input": "I need to find tomcat exploits in metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 63, "user_input": "List SMB shares on 192.168.1.10", "expected_tool": "terminal", "expected_contains": "smbclient", "category": "terminal"}
+{"id": 64, "user_input": "Scan ports on 192.168.1.50", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 65, "user_input": "I need to search for log4j vulnerabilities", "expected_tool": "cve_search", "expected_contains": "log4j", "category": "cve_search"}
+{"id": 66, "user_input": "Look up CVE-2021-44228", "expected_tool": "cve_search", "expected_contains": "CVE-2021-44228", "category": "cve_search"}
+{"id": 67, "user_input": "Search for Apache exploits", "expected_tool": "msf_search", "expected_contains": "apache", "category": "msf_search"}
+{"id": 68, "user_input": "Can you dictionary attack on ftp server?", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 69, "user_input": "Enumerate subdomains of example.com", "expected_tool": "terminal", "expected_contains": "dnsrecon", "category": "terminal"}
+{"id": 70, "user_input": "I need to list smb shares on 192.168.1.10", "expected_tool": "terminal", "expected_contains": "smbclient", "category": "terminal"}
+{"id": 71, "user_input": "I need to dns zone transfer on target.local", "expected_tool": "terminal", "expected_contains": "dig", "category": "terminal"}
+{"id": 72, "user_input": "I need to search for apache exploits", "expected_tool": "msf_search", "expected_contains": "apache", "category": "msf_search"}
+{"id": 73, "user_input": "Quick scan of 10.10.10.10", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 74, "user_input": "Can you search for windows smb exploits?", "expected_tool": "msf_search", "expected_contains": "smb", "category": "msf_search"}
+{"id": 75, "user_input": "Query LDAP users", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 76, "user_input": "Can you scan ports on 192.168.1.50?", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 77, "user_input": "Full TCP scan against target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 78, "user_input": "I need to dns zone transfer on target.local", "expected_tool": "terminal", "expected_contains": "dig", "category": "terminal"}
+{"id": 79, "user_input": "Bruteforce SSH on 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 80, "user_input": "Query LDAP users", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 81, "user_input": "Can you bruteforce ssh on 192.168.1.100?", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 82, "user_input": "Generate bash reverse shell to 10.0.0.1:4444", "expected_tool": "generate_payload", "expected_contains": "bash", "category": "generate_payload"}
+{"id": 83, "user_input": "Can you find tomcat exploits in metasploit?", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 84, "user_input": "Scan web vulnerabilities on host-39.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}
+{"id": 85, "user_input": "I need to enumerate ldap on domain controller", "expected_tool": "terminal", "expected_contains": "ldapsearch", "category": "terminal"}
+{"id": 86, "user_input": "Can you scan ports on 192.168.1.50?", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 87, "user_input": "I need to enumerate directories on http://target.com", "expected_tool": "terminal", "expected_contains": "gobuster", "category": "terminal"}
+{"id": 88, "user_input": "Can you full tcp scan on target?", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 89, "user_input": "Enumerate subdomains of example.com", "expected_tool": "terminal", "expected_contains": "dnsrecon", "category": "terminal"}
+{"id": 90, "user_input": "Look up CVE-2021-44228", "expected_tool": "cve_search", "expected_contains": "CVE-2021-44228", "category": "cve_search"}
+{"id": 91, "user_input": "I need to find tomcat exploits in metasploit", "expected_tool": "msf_search", "expected_contains": "tomcat", "category": "msf_search"}
+{"id": 92, "user_input": "I need to search for windows smb exploits", "expected_tool": "msf_search", "expected_contains": "smb", "category": "msf_search"}
+{"id": 93, "user_input": "I need to full tcp scan on target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 94, "user_input": "Can you quick scan of 10.10.10.10?", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 95, "user_input": "I need to enumerate directories on http://target.com", "expected_tool": "terminal", "expected_contains": "gobuster", "category": "terminal"}
+{"id": 96, "user_input": "Full TCP scan against target", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 97, "user_input": "Bruteforce SSH against 192.168.1.100", "expected_tool": "terminal", "expected_contains": "hydra", "category": "terminal"}
+{"id": 98, "user_input": "I need to quick scan of 10.10.10.10", "expected_tool": "terminal", "expected_contains": "nmap", "category": "terminal"}
+{"id": 99, "user_input": "I need to scan web vulnerabilities on target.local", "expected_tool": "terminal", "expected_contains": "nikto", "category": "terminal"}

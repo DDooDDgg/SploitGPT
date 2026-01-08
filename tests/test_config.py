@@ -3,7 +3,6 @@ Tests for configuration normalization.
 """
 
 import importlib
-import os
 
 
 def test_msf_host_forced_loopback(monkeypatch):

@@ -1,0 +1,123 @@
+# SploitGPT Container Orchestration
+# Podman Compose (recommended) and Docker Compose compatible
+#
+# Usage with Podman:
+#   podman compose up -d
+#   podman compose logs -f sploitgpt
+#   podman compose down
+#
+# Usage with Docker:
+#   docker compose up -d
+#   docker compose logs -f sploitgpt
+#   docker compose down
+#
+# For GPU support with Podman, ensure CDI is configured:
+#   nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+#
+# To use host Ollama instead of containerized:
+#   1. Comment out the ollama service
+#   2. Set SPLOITGPT_OLLAMA_HOST=http://host.containers.internal:11434
+
+services:
+  sploitgpt:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: localhost/sploitgpt:latest
+    container_name: sploitgpt
+    hostname: sploitgpt
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      SPLOITGPT_OLLAMA_HOST: "${SPLOITGPT_OLLAMA_HOST:-http://ollama:11434}"
+      # Use the fine-tuned SploitGPT v5.10e model
+      SPLOITGPT_MODEL: "${SPLOITGPT_MODEL:-sploitgpt-7b-v5.10e:q5}"
+      SPLOITGPT_MSF_HOST: "${SPLOITGPT_MSF_HOST:-127.0.0.1}"
+      SPLOITGPT_MSF_PORT: "${SPLOITGPT_MSF_PORT:-55553}"
+      SPLOITGPT_MSF_PASSWORD: "${SPLOITGPT_MSF_PASSWORD:-sploitgpt}"
+      SPLOITGPT_MSF_SSL: "${SPLOITGPT_MSF_SSL:-false}"
+      SPLOITGPT_LPORT: "${SPLOITGPT_LPORT:-40000}"
+      SPLOITGPT_LISTENER_PORTS: "${SPLOITGPT_LISTENER_PORTS:-40000-40100}"
+      TERM: "xterm-256color"
+
+    volumes:
+      - ./loot:/app/loot
+      - ./sessions:/app/sessions
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./vpn:/vpn:ro
+
+    command: ["sploitgpt"]
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS "$${SPLOITGPT_OLLAMA_HOST:-http://ollama:11434}/api/version" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+    networks:
+      - sploitnet_wan
+      - sploitnet_internal
+
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # For Podman with NVIDIA GPU support, use CDI (Container Device Interface)
+    # Install nvidia-container-toolkit and run: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+    # Then uncomment the devices section below:
+    devices:
+      - nvidia.com/gpu=all
+    command: ["serve"]
+    volumes:
+      # Mount host Ollama models directory - adjust path as needed
+      - ${OLLAMA_MODELS_DIR:-~/.ollama}:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - sploitnet_internal
+      - sploitnet_wan
+
+  listener-proxy:
+    image: docker.io/library/alpine:3.20
+    container_name: sploitgpt-listeners
+    profiles: ["listeners"]
+    restart: unless-stopped
+    depends_on:
+      sploitgpt:
+        condition: service_started
+    network_mode: "service:sploitgpt"
+    command: ["sleep", "infinity"]
+    ports:
+      - "${SPLOITGPT_LISTENER_PORTS:-40000-40100}:${SPLOITGPT_LISTENER_PORTS:-40000-40100}"
+
+networks:
+  sploitnet_internal:
+    driver: bridge
+    internal: true
+  sploitnet_wan:
+    driver: bridge
+
+volumes:
+  ollama_data:

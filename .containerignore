@@ -1,0 +1,35 @@
+# Python caches / virtualenv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# Test / typecheck / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# VCS
+.git/
+.gitignore
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Runtime / generated data (mounted as volumes in docker-compose)
+loot/
+sessions/
+data/
+logs/
+models/
+
+# Unrelated subprojects
+ghostcrew/
+
+# OS/editor
+.DS_Store
+*.swp
+*.swo

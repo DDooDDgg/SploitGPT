@@ -27,6 +27,7 @@ Follow this methodology when given a target. Execute commands using the `termina
 
 ### 1.3 Shodan (if API configured)
 - Use `/shodan_search "<query>"` to pivot on exposed services; scope with filters like `country:XX`, `org:"Org Name"`, `port:443`, `hostname:"example.com"`.
+- Use `page` for pagination, `facets` for summaries (e.g., `org,port,country`), and `output="json"` when you want structured results.
 - Start with embedded dork lists (Shodan dorks + awesome queries) for ideas; combine with your target keywords.
 - Respect legal/engagement scope and Shodan rate limits; avoid logging in to exposed devices.
 

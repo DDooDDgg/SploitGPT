@@ -33,6 +33,7 @@ venv/
 *.swp
 *.swo
 *~
+*.code-workspace
 
 # OS
 .DS_Store
@@ -41,19 +42,47 @@ Thumbs.db
 # Project specific
 loot/
 *.log
+*.out
 sessions/
 models/
+models-adapters/
+models-gguf/
+models-v*/
+llama_cpp_tools/
+tmp/
+tmp_*
 *.gguf
 *.bin
+
+# Cloud training artifacts
+cloud_backup_*/
+cloud-training-*.tar.gz
+cloud-training-package/
+
+# Build artifacts
+llama.cpp/
+unsloth_compiled_cache/
+_unsloth_sentencepiece_temp/
 
 # Docker
 .docker/
 
-# Training data (generated)
+# Training data and caches (generated at runtime)
 data/training/
 data/cache/
+data/tiktoken_cache/
+data/*.db
+data/*.sqlite
+data/*.index
+data/*.npy
+data/*.json
 *.sqlite
 *.db
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
 
 # Secrets
 *.pem
@@ -62,3 +91,19 @@ id_rsa*
 
 # VPN configs (local-only)
 vpn/
+
+# Reports and runtime logs (local only)
+reports/
+logs/
+
+# Training scripts and utilities (local development only)
+scripts/training/
+scripts/utils/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Archived documentation (historical)
+docs/archive/

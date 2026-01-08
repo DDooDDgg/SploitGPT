@@ -31,6 +31,7 @@ dependencies = [
     "pyyaml>=6.0",
     "jinja2>=3.1.0",
     "litellm>=1.50.0",
+    "keyring>=25.0.0",
 ]
 
 [project.optional-dependencies]
@@ -59,16 +60,51 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [
+    "llama.cpp",
+    "tmp_llama.cpp",
+    "unsloth_compiled_cache",
+    "_unsloth_sentencepiece_temp",
+    "vendor",
+    "third_party",
+]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "C4", "PIE", "SIM", "RUF"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # Allow assert in tests
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["sploitgpt"]
+branch = true
+omit = [
+    "sploitgpt/training/*",
+    "sploitgpt/tui/*",
+    "sploitgpt/cli.py",
+    "sploitgpt/__main__.py",
+    "sploitgpt/knowledge/kali_tools_ingest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+fail_under = 40
+show_missing = true

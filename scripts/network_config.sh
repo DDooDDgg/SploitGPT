@@ -1,6 +1,6 @@
 #!/bin/bash
 # SploitGPT Network Configuration Helper
-# Detects Docker bridge IP and configures Ollama connection
+# Detects container bridge IP and configures Ollama connection (Podman-first)
 
 set -e
 
@@ -14,16 +14,18 @@ echo -e "${CYAN}SploitGPT Network Configuration${NC}"
 echo "================================"
 echo ""
 
-# Detect Docker bridge IP
-detect_docker_bridge() {
-    # Try docker0 first (default bridge)
-    if ip addr show docker0 &>/dev/null; then
-        DOCKER_BRIDGE_IP=$(ip addr show docker0 | grep -oP 'inet \K[\d.]+' | head -1)
-        if [ -n "$DOCKER_BRIDGE_IP" ]; then
-            echo "$DOCKER_BRIDGE_IP"
-            return 0
+# Detect container bridge IP (Podman).
+detect_container_bridge() {
+    # Podman rootful bridge interfaces vary by distro/version.
+    for iface in podman0 cni-podman0 docker0; do
+        if ip addr show "$iface" &>/dev/null; then
+            BRIDGE_IP=$(ip addr show "$iface" | grep -oP 'inet \K[\d.]+' | head -1)
+            if [ -n "$BRIDGE_IP" ]; then
+                echo "$BRIDGE_IP"
+                return 0
+            fi
         fi
-    fi
+    done
     
     # Fallback: check any bridge interface
     for iface in $(ip link show type bridge 2>/dev/null | grep -oP '^\d+: \K[^:]+'); do
@@ -75,11 +77,11 @@ detect_vpn() {
 echo -e "${CYAN}Detecting network configuration...${NC}"
 echo ""
 
-DOCKER_BRIDGE=$(detect_docker_bridge)
+CONTAINER_BRIDGE=$(detect_container_bridge)
 HOST_IP=$(detect_host_ip)
 VPN_STATUS=$(detect_vpn)
 
-echo -e "Docker Bridge IP:  ${GREEN}$DOCKER_BRIDGE${NC}"
+echo -e "Container Bridge IP:  ${GREEN}$CONTAINER_BRIDGE${NC}"
 echo -e "Host IP:           ${GREEN}$HOST_IP${NC}"
 echo -e "VPN:               ${GREEN}$VPN_STATUS${NC}"
 echo ""
@@ -104,7 +106,7 @@ cat > "$ENV_FILE" << EOF
 # SploitGPT Network Configuration
 # Generated: $(date)
 
-# Ollama connection (docker-compose service DNS on the private docker network)
+# Ollama connection (compose service DNS on the private container network)
 SPLOITGPT_OLLAMA_HOST=http://ollama:11434
 
 # Model to use
@@ -133,7 +135,7 @@ echo ""
 echo "  This project defaults to bridge networking (isolated from the host)."
 echo "  If you need inbound callbacks/listeners (reverse shells, payload servers, etc.),"
 echo "  enable the listener profile to publish a limited port range:"
-echo "    docker compose --profile listeners up -d listener-proxy"
+echo "    podman compose --profile listeners -f compose.yaml up -d listener-proxy"
 echo "  Use a port from SPLOITGPT_LISTENER_PORTS and your host's reachable IP for LHOST."
 
 echo ""
