@@ -115,30 +115,23 @@ ollama list | grep sploitgpt
 
 ## Architecture
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ HOST                                                                     │
-│                                                                          │
-│  ┌─────────────┐      ┌─────────────────────────────────────────────┐   │
-│  │   Ollama    │      │           Kali Linux Container              │   │
-│  │             │      │                                             │   │
-│  │ SploitGPT   │ LLM  │  ┌─────────────────┐  ┌─────────────────┐  │   │
-│  │ 7B Model    │◄────►│  │ SploitGPT Agent │  │   Metasploit    │  │   │
-│  │             │      │  │                 │  │                 │  │   │
-│  │ (GPU)       │      │  │ - Tool calling  │  │ - RPC Server    │  │   │
-│  └─────────────┘      │  │ - RAG/Knowledge │  │ - MSF Viewer    │  │   │
-│                       │  │ - Audit logging │  │                 │  │   │
-│                       │  └────────┬────────┘  └────────┬────────┘  │   │
-│                       │           │                    │           │   │
-│                       │           ▼                    ▼           │   │
-│                       │  ┌─────────────────────────────────────┐  │   │
-│                       │  │         Kali Tool Arsenal           │  │   │
-│                       │  │  nmap  sqlmap  hydra  gobuster      │  │   │
-│                       │  │  nikto  nuclei  dirb  enum4linux   │  │   │
-│                       │  │  ... 600+ tools                     │  │   │
-│                       │  └─────────────────────────────────────┘  │   │
-│                       └─────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────────┘
+```
++---------------------------+       +------------------------------------+
+|         Ollama            |       |       Kali Linux Container         |
+|                           |       |                                    |
+|   +------------------+    |       |  +-------------+  +-------------+  |
+|   | SploitGPT Model  |    |  LLM  |  |  SploitGPT  |  | Metasploit  |  |
+|   | (Qwen2.5-7B)     |<---------->|  |    Agent    |  | RPC Server  |  |
+|   +------------------+    |       |  +------+------+  +------+------+  |
+|          GPU              |       |         |                |         |
++---------------------------+       |         v                v         |
+                                    |  +-----------------------------+   |
+                                    |  |     Kali Tool Arsenal       |   |
+                                    |  |  nmap sqlmap hydra nuclei   |   |
+                                    |  |  gobuster nikto enum4linux  |   |
+                                    |  |       ... 600+ tools        |   |
+                                    |  +-----------------------------+   |
+                                    +------------------------------------+
 ```
 
 ---
@@ -149,16 +142,16 @@ ollama list | grep sploitgpt
 
 The TUI shows live tool execution status with `Ctrl+A`:
 
-```text
-┌─ SploitGPT ──────────────────────────────────┬─ Activity ─────────┐
-│                                              │ [12:34:01] START   │
-│ User: Scan the target network                │   nmap             │
-│                                              │ [12:34:15] ♥ 14s   │
-│ SploitGPT: Running nmap scan...              │   nmap (running)   │
-│ > nmap -sV -sC 10.0.0.0/24                   │ [12:34:45] DONE    │
-│                                              │   nmap (44s)       │
-│ [output appears here]                        │                    │
-└──────────────────────────────────────────────┴────────────────────┘
+```
++--- SploitGPT ----------------------------+--- Activity ---------+
+|                                          | [12:34:01] START     |
+| User: Scan the target network            |   nmap               |
+|                                          | [12:34:15] * 14s     |
+| SploitGPT: Running nmap scan...          |   nmap (running)     |
+| > nmap -sV -sC 10.0.0.0/24               | [12:34:45] DONE      |
+|                                          |   nmap (44s)         |
+| [output appears here]                    |                      |
++------------------------------------------+----------------------+
 ```
 
 - Shows start/complete status for each tool
